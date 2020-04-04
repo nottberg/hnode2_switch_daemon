@@ -1,0 +1,177 @@
+{
+  "devList":[
+    {
+      "id":"exp1",
+      "class":"i2c-gpio-exp",
+      "model":"mcp23008",
+      "devnum":"1",
+      "busaddr":"0x23",
+      "desc":"irrigation1"
+    },
+    {
+      "id":"exp2",
+      "class":"i2c-gpio-exp",
+      "model":"mcp23008",
+      "devnum":"1",
+      "busaddr":"0x25",
+      "desc":"irrigation2"
+    },
+    {
+      "id":"exp3",
+      "class":"i2c-gpio-exp",
+      "model":"mcp23008",
+      "devnum":"1",
+      "busaddr":"0x27",
+      "desc":"irrigation3"
+    }
+  ],
+  "switchList":[
+    {
+      "swid":"s1",
+      "dev-id":"exp1",
+      "dev-param":"0",
+      "desc":"Garden Drip"
+    },
+    {
+      "swid":"s2",
+      "dev-id":"exp1",
+      "dev-param":"1",
+      "desc":"Test NC"
+    },
+    {
+      "swid":"s3",
+      "dev-id":"exp1",
+      "dev-param":"2",
+      "desc":"Test NC"
+    },
+    {
+      "swid":"s4",
+      "dev-id":"exp1",
+      "dev-param":"3",
+      "desc":"Test NC"
+    },
+    {
+      "swid":"s5",
+      "dev-id":"exp1",
+      "dev-param":"4",
+      "desc":"Test NC"
+    },
+    {
+      "swid":"s6",
+      "dev-id":"exp1",
+      "dev-param":"5",
+      "desc":"Test NC"
+    },
+    {
+      "swid":"s7",
+      "dev-id":"exp1",
+      "dev-param":"6",
+      "desc":"Test NC"
+    },
+    {
+      "swid":"s8",
+      "dev-id":"exp1",
+      "dev-param":"7",
+      "desc":"Test NC"
+    },
+
+    {
+      "swid":"s9",
+      "dev-id":"exp2",
+      "dev-param":"0",
+      "desc":"Front Planter"
+    },
+    {
+      "swid":"s10",
+      "dev-id":"exp2",
+      "dev-param":"1",
+      "desc":"Front Grass West"
+    },
+    {
+      "swid":"s11",
+      "dev-id":"exp2",
+      "dev-param":"2",
+      "desc":"Front Grass East"
+    },
+    {
+      "swid":"s12",
+      "dev-id":"exp2",
+      "dev-param":"3",
+      "desc":"East Planter"
+    },
+    {
+      "swid":"s13",
+      "dev-id":"exp2",
+      "dev-param":"4",
+      "desc":"North Planter"
+    },
+    {
+      "swid":"s14",
+      "dev-id":"exp2",
+      "dev-param":"5",
+      "desc":"South East Berm"
+    },
+    {
+      "swid":"s15",
+      "dev-id":"exp2",
+      "dev-param":"6",
+      "desc":"South West Berm"
+    },
+    {
+      "swid":"s16",
+      "dev-id":"exp2",
+      "dev-param":"7",
+      "desc":"East Shrubs"
+    },
+
+    {
+      "swid":"s17",
+      "dev-id":"exp3",
+      "dev-param":"0",
+      "desc":"Dog Paddock 1"
+    },
+    {
+      "swid":"s18",
+      "dev-id":"exp3",
+      "dev-param":"1",
+      "desc":"Dog Paddock 2"
+    },
+    {
+      "swid":"s19",
+      "dev-id":"exp3",
+      "dev-param":"2",
+      "desc":"Dog Paddock 3"
+    },
+    {
+      "swid":"s20",
+      "dev-id":"exp3",
+      "dev-param":"3",
+      "desc":"Dog Paddock 4"
+    },
+    {
+      "swid":"s21",
+      "dev-id":"exp3",
+      "dev-param":"4",
+      "desc":"East Back Fence"
+    },
+    {
+      "swid":"s22",
+      "dev-id":"exp3",
+      "dev-param":"5",
+      "desc":"West Back Fence"
+    },
+    {
+      "swid":"s23",
+      "dev-id":"exp3",
+      "dev-param":"6",
+      "desc":"Test NC"
+    },
+    {
+      "swid":"s24",
+      "dev-id":"exp3",
+      "dev-param":"7",
+      "desc":"Test NC"
+    }
+  ]
+}
+
