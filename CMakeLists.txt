@@ -1,0 +1,44 @@
+CMAKE_MINIMUM_REQUIRED( VERSION 2.8 ) 
+PROJECT( hnode_switchd ) 
+
+SET( CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/Modules/" )
+
+SET( HNSWITCHD_SRC
+     ${CMAKE_SOURCE_DIR}/src/daemon/hnswitchd.cpp
+     ${CMAKE_SOURCE_DIR}/src/daemon/HNSwitchDaemon.cpp
+     ${CMAKE_SOURCE_DIR}/src/daemon/HNScheduleMatrix.cpp
+#     ${CMAKE_SOURCE_DIR}/src/daemon/Switch.cpp
+#     ${CMAKE_SOURCE_DIR}/src/daemon/SwitchDevice.cpp
+     ${CMAKE_SOURCE_DIR}/src/daemon/SwitchManager.cpp
+#     ${CMAKE_SOURCE_DIR}/src/daemon/I2CExpander.cpp
+#     ${CMAKE_SOURCE_DIR}/src/daemon/MCP23008Expander.cpp
+     ${CMAKE_SOURCE_DIR}/src/daemon/HNodeSWDPacket.cpp
+)
+
+SET( HNSWITCHD_CLIENT_SRC
+     ${CMAKE_SOURCE_DIR}/src/client/hnswitchd_client.cpp
+     ${CMAKE_SOURCE_DIR}/src/client/HNodeSWDPacket.cpp
+)
+
+SET(CMAKE_BUILD_TYPE Debug)
+
+FIND_PACKAGE( Poco REQUIRED Foundation Net NetSSL JSON )
+FIND_PACKAGE(Boost 1.49.0 COMPONENTS program_options REQUIRED) 
+FIND_PACKAGE(LibXml2 REQUIRED)
+
+INCLUDE_DIRECTORIES( ${CMAKE_SOURCE_DIR}/src/include )
+INCLUDE_DIRECTORIES( ${Boost_INCLUDE_DIRS} )
+INCLUDE_DIRECTORIES( ${LIBXML2_INCLUDE_DIR} )
+
+INCLUDE_DIRECTORIES( ${CMAKE_SOURCE_DIR}/src )
+
+ADD_EXECUTABLE( hnswitchd ${HNSWITCHD_SRC} )
+TARGET_LINK_LIBRARIES( hnswitchd PRIVATE Poco::Foundation Poco::Net Poco::NetSSL Poco::JSON )
+TARGET_LINK_LIBRARIES( hnswitchd PRIVATE "-ldaemon" )
+TARGET_LINK_LIBRARIES( hnswitchd PRIVATE "-li2c" )
+TARGET_LINK_LIBRARIES( hnswitchd PRIVATE ${LIBXML2_LIBRARIES} )
+TARGET_LINK_LIBRARIES( hnswitchd PRIVATE ${Boost_LIBRARIES} )
+
+ADD_EXECUTABLE( hnswitchd_client ${HNSWITCHD_CLIENT_SRC} ) 
+TARGET_LINK_LIBRARIES( hnswitchd_client ${Boost_LIBRARIES} )
+
