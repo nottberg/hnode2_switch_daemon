@@ -231,38 +231,39 @@ HNSWI2CExpander::mcp23008Init()
     // Build the device string
     sprintf( devfn, "/dev/i2c-%d", devnum );
   
-    printf( "mcp23008 start: %s, 0x%x\n", devfn, busaddr );
-
+    log.info( "Initializing switch control device - model: %s  busaddr:  0x%x  devpath: %s", getModel().c_str(), busaddr, devfn );
+ 
     // Attempt to open the i2c device 
     if( ( i2cfd = open( devfn, O_RDWR ) ) < 0 ) 
     {
-        printf( "Failed to acquire bus access and/or talk to slave.\n" ); 
-        perror("Failed to open the i2c bus");
+        log.error( "ERROR: Failure to open i2c bus device %s: %s", devfn, strerror( errno ) );    
         return HNSW_RESULT_FAILURE;
     }
 
     // Tell the device which endpoint we want to talk to.
     if( ioctl( i2cfd, I2C_SLAVE, busaddr ) < 0 )
     {
-        printf( "Failed to acquire bus access and/or talk to slave.\n" );
-        /* ERROR HANDLING; you can check errno to see what went wrong */
+        log.error( "ERROR: Failure to set target device to 0x%x for i2c bus %s: %s", busaddr, devfn, strerror( errno ) );    
         return HNSW_RESULT_FAILURE;
     }
 
     // Clear all of the outputs initially.
     if( mcp23008SetPortState( 0 ) != HNSW_RESULT_SUCCESS )
     {
+        log.error( "ERROR: Failure to 0 port state for i2c addr 0x%x", busaddr );    
         return HNSW_RESULT_FAILURE;
     }
 
     // Init the IO direction (inbound) and pullup (off) settings
     if( mcp23008SetPortMode( 0xFF ) != HNSW_RESULT_SUCCESS )
     {
+        log.error( "ERROR: Failure to set io direction to inbound for i2c addr 0x%x", busaddr );    
         return HNSW_RESULT_FAILURE;
     }
 
     if( mcp23008SetPortPullup( 0x00 ) != HNSW_RESULT_SUCCESS )
     {
+        log.error( "ERROR: Failure to disable pullups for i2c addr 0x%x", busaddr );    
         return HNSW_RESULT_FAILURE;
     }
 
@@ -270,16 +271,20 @@ HNSWI2CExpander::mcp23008Init()
     uint currentState;
     if( mcp23008GetPortState( currentState ) != HNSW_RESULT_SUCCESS )
     {
+        log.error( "ERROR: Failure to read current state for i2c addr 0x%x", busaddr );    
         return HNSW_RESULT_FAILURE;
     }
 
-    printf( "Initial Value Read: %d\n", currentState );
+    log.debug( "Initial value from 0x%x: %d\n", busaddr, currentState );
 
     // Turn all of the pins over to outputs
     if( mcp23008SetPortMode( 0x00 ) != HNSW_RESULT_SUCCESS )
     {
+        log.error( "ERROR: Failure to set io direction to outbound for i2c addr 0x%x", busaddr );    
         return HNSW_RESULT_FAILURE;
     }
+
+    log.info( "Initialization complete - model: %s  busaddr:  0x%x  devpath: %s", getModel().c_str(), busaddr, devfn );
 
     return HNSW_RESULT_SUCCESS;
 }
