@@ -56,24 +56,20 @@ HNSwitchDaemon::displayHelp()
 int 
 HNSwitchDaemon::main( const std::vector<std::string>& args )
 {
+    // Move me to before option processing.
+    instanceName = HN_SWDAEMON_DEF_INSTANCE;
+
     if(helpRequested)
     {
         displayHelp();
         return Application::EXIT_OK;
     }
 
-    //ServerSocket sockSrv(listenPort);
-    //HTTPServer httpSrv(new RequestFactory(ApplicationServer::instance()),
-    //                       sockSrv,new HTTPServerParams);
-    //httpSrv.start();
-    //waitForTerminationRequest();
-    //httpSrv.stop();
-
-    schMat.loadSchedule( "switch-deamon", "default" );
+    schMat.loadSchedule( HN_SWDAEMON_DEVICE_NAME, instanceName );
 
     // Initialize/Startup the switch manager
     switchMgr.setNotificationSink( this );
-    switchMgr.loadConfiguration( "switch-deamon", "default" );
+    switchMgr.loadConfiguration( HN_SWDAEMON_DEVICE_NAME, instanceName );
 
     // Initialize the devices
     switchMgr.initDevices();
