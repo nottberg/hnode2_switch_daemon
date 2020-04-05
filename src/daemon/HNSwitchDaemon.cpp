@@ -32,15 +32,15 @@ HNSwitchDaemon::defineOptions( OptionSet& options )
               Option("help", "h", "display help").required(false).repeatable(false));
 
     options.addOption(
-            Option("port","p", "Listening port (default 9980)").required(false).repeatable(true).argument("<port>"));
+            Option("debug","d", "Enable debug logging").required(false).repeatable(false));
 }
 
 void 
 HNSwitchDaemon::handleOption( const std::string& name, const std::string& value )
 {
-    ServerApplication::handleOption(name,value);
-    if(name=="help") helpRequested=true;
-    //if(name=="port") listenPort=stoi(value);
+    ServerApplication::handleOption( name, value );
+    if(name=="help") _helpRequested = true;
+    if(name=="debug") _debugLogging = true;
 }
 
 void 
@@ -49,7 +49,7 @@ HNSwitchDaemon::displayHelp()
     HelpFormatter helpFormatter(options());
     helpFormatter.setCommand(commandName());
     helpFormatter.setUsage("[options]");
-    helpFormatter.setHeader("C++ server pages application server.");
+    helpFormatter.setHeader("HNode2 Switch Daemon.");
     helpFormatter.format(std::cout);
 }
 
@@ -59,7 +59,17 @@ HNSwitchDaemon::main( const std::vector<std::string>& args )
     // Move me to before option processing.
     instanceName = HN_SWDAEMON_DEF_INSTANCE;
 
-    if(helpRequested)
+    // Enable debug logging if requested
+    if( _debugLogging == true )
+    {
+       log.setLevelLimit( HNDL_LOG_LEVEL_ALL );
+    }
+
+    // Setup logging for sub objects
+    schMat.setDstLog( &log );
+    switchMgr.setDstLog( &log );
+
+    if( _helpRequested )
     {
         displayHelp();
         return Application::EXIT_OK;
@@ -354,7 +364,7 @@ HNSwitchDaemon::openListenerSocket( std::string deviceName, std::string instance
     addr.sun_family = AF_UNIX;                     
 
     // Abstract socket with name @<deviceName>-<instanceName>
-    sprintf( str, "%s-%s", deviceName.c_str(), instanceName.c_str() );
+    sprintf( str, "hnode2-%s-%s", deviceName.c_str(), instanceName.c_str() );
     strncpy( &addr.sun_path[1], str, strlen(str) );
 
     acceptFD = socket( AF_UNIX, SOCK_SEQPACKET, 0 );

@@ -175,14 +175,9 @@ HNSAction::sortCompare( const HNSAction& first, const HNSAction& second )
 }
 
 void
-HNSAction::debugPrint( uint offset )
+HNSAction::debugPrint( uint offset, HNDaemonLogSrc &log )
 {
-    std::cout << std::setw( offset ) << " ";
-    std::cout << "action: " << action;
-    std::cout << "  start: " << start.getHMSStr();
-    std::cout << "  end: " << end.getHMSStr();
-    std::cout << "  switch: " << swid;
-    std::cout << std::endl;
+    log.debug( "%*.*caction: %d  start: %s  end: %s  switch: %s", offset, offset, ' ', action, start.getHMSStr().c_str(), end.getHMSStr().c_str(), swid.c_str() );
 }
 
 HNSDay::HNSDay()
@@ -240,13 +235,13 @@ HNSDay::sortActions()
 }
 
 void
-HNSDay::debugPrint( uint offset )
+HNSDay::debugPrint( uint offset, HNDaemonLogSrc &log )
 {
-    std::cout << std::setw( offset ) << " " << "Day: " << dayName << std::endl;
+    log.debug( "%*.*cDay: %s", offset, offset, ' ', dayName.c_str() );
 
     for( std::list< HNSAction >::iterator it = actionArr.begin(); it != actionArr.end(); it++ )
     {
-        it->debugPrint( offset + 2 );
+        it->debugPrint( offset + 2, log );
     }
 }
 
@@ -263,6 +258,12 @@ HNScheduleMatrix::HNScheduleMatrix()
 HNScheduleMatrix::~HNScheduleMatrix()
 {
 
+}
+
+void 
+HNScheduleMatrix::setDstLog( HNDaemonLog *logPtr )
+{
+    log.setDstLog( logPtr );
 }
 
 void 
@@ -337,6 +338,7 @@ HNScheduleMatrix::loadSchedule( std::string devname, std::string instance )
     // Generate and verify filename
     if( generateFilePath( fpath ) != HNSM_RESULT_SUCCESS )
     {
+        log.error( "ERROR: Failed to schedule matrix file path for: %s %s", devname, instance );
         return HNSM_RESULT_FAILURE;
     }    
 
@@ -344,8 +346,11 @@ HNScheduleMatrix::loadSchedule( std::string devname, std::string instance )
     Poco::Path path( fpath );
     Poco::File file( path );
 
+    log.info( "Attempting to load schedule matrix config from: %s", path.toString().c_str() );
+
     if( file.exists() == false || file.isFile() == false )
     {
+        log.error( "ERROR: Schedule matrix config file does not exist: %s", path.toString().c_str() );
         return HNSM_RESULT_FAILURE;
     }
 
@@ -355,6 +360,7 @@ HNScheduleMatrix::loadSchedule( std::string devname, std::string instance )
 
     if( its.is_open() == false )
     {
+        log.error( "ERROR: Schedule matrix config file open failed: %s", path.toString().c_str() );
         return HNSM_RESULT_FAILURE;
     }
 
@@ -375,14 +381,20 @@ HNScheduleMatrix::loadSchedule( std::string devname, std::string instance )
             if( it->first == "scheduleTimezone" )
             {
                 if( it->second.isString() == false )
+                {
+                    log.warn( "Warning: Non-string scheduleTimezone value." );
                     continue;
+                }
 
                 setTimezone( it->second );
             }
             else if( it->first == "scheduleMatrix" )
             {
                 if( jsRoot->isObject( it ) == false )
+                {
+                    log.warn( "Warning: Non-object scheduleMatrix value." );
                     continue;
+                }
 
                 pjs::Object::Ptr jsDayObj = jsRoot->getObject( it->first );
 
@@ -394,7 +406,10 @@ HNScheduleMatrix::loadSchedule( std::string devname, std::string instance )
                         if( scDayNames[dindx] == dit->first )
                         {
                             if( jsDayObj->isArray( dit ) == false )
+                            {
+                                log.warn( "Warning: Non-array day object value: %s", dit->first.c_str() );
                                 break;
+                            }
 
                             pjs::Array::Ptr jsActArr = jsDayObj->getArray( dit->first );
 
@@ -409,7 +424,10 @@ HNScheduleMatrix::loadSchedule( std::string devname, std::string instance )
                                     for( pjs::Object::ConstIterator aoit = jsAct->begin(); aoit != jsAct->end(); aoit++ )
                                     {
                                         if( aoit->second.isString() == false )
+                                        {
+                                            log.warn( "Warning: Non-string action object value" );
                                             break;
+                                        }
                                         
                                         tmpAction.handlePair( aoit->first, aoit->second );
                                     }
@@ -418,10 +436,12 @@ HNScheduleMatrix::loadSchedule( std::string devname, std::string instance )
                                 }
                                 else
                                 {
-                                    // Unrecognized config element at array layer
+                                    log.warn( "Warning: Non-object type for day action." );
                                 }
                             }
 
+                            // Correct day already found,
+                            // skip any additional loop iterations.
                             break;
                         } 
 
@@ -433,6 +453,7 @@ HNScheduleMatrix::loadSchedule( std::string devname, std::string instance )
     }
     catch( Poco::Exception ex )
     {
+        log.error( "ERROR: Schedule matrix config file json parse failure: %s", ex.displayText().c_str() );
         its.close();
         return HNSM_RESULT_FAILURE;
     }
@@ -445,6 +466,8 @@ HNScheduleMatrix::loadSchedule( std::string devname, std::string instance )
     
     // 
     debugPrint();
+
+    log.info( "Schedule matrix config successfully loaded." );
 
     // Done
     return HNSM_RESULT_SUCCESS;
@@ -467,14 +490,13 @@ HNScheduleMatrix::getSwitchOnList( struct tm *time, std::vector< std::string > &
 void
 HNScheduleMatrix::debugPrint()
 {
-    std::cout << "==== Schedule Matrix for " << deviceName << "-" << instanceName << " ====" << std::endl;
+    log.debug( "==== Schedule Matrix for %s-%s ====", deviceName.c_str(), instanceName.c_str() );
+    log.debug( "  timezone: %s", timezone.c_str() );
+    log.debug( "  === Schedule Array ===" );
 
-    std::cout << "  timezone: " << timezone << std::endl;
-
-    std::cout << "  === Schedule Array ===" << std::endl;
     for( int i = 0; i < HNS_DAY_CNT; i++ )
     {
-       dayArr[i].debugPrint( 4 );
+       dayArr[i].debugPrint( 4, log );
     }
 }
 

@@ -35,12 +35,13 @@ typedef enum HNSwitchDaemonResultEnum
   HNSD_RESULT_FAILURE
 }HNSD_RESULT_T;
 
-class HNSwitchDaemon : public Poco::Util::ServerApplication, public SwitchManagerNotifications
+class HNSwitchDaemon : public Poco::Util::ServerApplication, public HNSwitchManagerNotifications
 {
     private:
         HNDaemonLog log;
 
-        bool helpRequested=false;
+        bool _helpRequested = false;
+        bool _debugLogging = false;
 
         bool quit;
 
@@ -55,7 +56,7 @@ class HNSwitchDaemon : public Poco::Util::ServerApplication, public SwitchManage
 
         std::map< int, ClientRecord > clientMap;
 
-        SwitchManager  switchMgr;
+        HNSwitchManager  switchMgr;
 
         bool           sendStatus;
 

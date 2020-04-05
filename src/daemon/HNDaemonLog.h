@@ -18,11 +18,34 @@ class HNDaemonLog
 
         HNDL_LOG_LEVEL_T curLimit;
 
+    protected:
         void processMsg( HNDL_LOG_LEVEL_T level, const char *format, va_list args );
 
     public:
         HNDaemonLog();
        ~HNDaemonLog();
+
+        void setLevelLimit( HNDL_LOG_LEVEL_T value );
+
+        void debug( const char *format, ... );
+        void info( const char *format, ... );
+        void warn( const char *format, ... );
+        void error( const char *format, ... );
+        
+    friend class HNDaemonLogSrc;
+};
+
+class HNDaemonLogSrc
+{
+    private:
+        HNDaemonLog *logPtr;
+
+    public:
+        HNDaemonLogSrc();
+       ~HNDaemonLogSrc();
+
+        void clearDstLog();
+        void setDstLog( HNDaemonLog *dstLog );
 
         void debug( const char *format, ... );
         void info( const char *format, ... );

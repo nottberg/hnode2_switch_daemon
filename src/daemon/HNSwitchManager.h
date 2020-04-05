@@ -8,6 +8,8 @@
 
 #include <stdio.h>
 
+#include "HNDaemonLog.h"
+
 typedef enum HNSwitchManagerResultEnum
 {
     HNSW_RESULT_SUCCESS,
@@ -129,7 +131,7 @@ class HNSWSwitch
         void debugPrint( uint offset );
 };
 
-class SwitchManagerNotifications
+class HNSwitchManagerNotifications
 {
     public:
         virtual void signalError( std::string errMsg ) = 0;
@@ -138,11 +140,13 @@ class SwitchManagerNotifications
 
 #define HNSW_ROOT_DIRECTORY_DEFAULT "/var/cache/hnode2"
 
-class SwitchManager
+class HNSwitchManager
 {
     private:
+        HNDaemonLogSrc log;
+
         std::string rootDirPath;
-        SwitchManagerNotifications *notifySink;
+        HNSwitchManagerNotifications *notifySink;
 
         std::string deviceName;
         std::string instanceName;
@@ -153,10 +157,12 @@ class SwitchManager
         HNSW_RESULT_T generateFilePath( std::string &fpath );
 
     public:
-        SwitchManager();
-       ~SwitchManager();
+        HNSwitchManager();
+       ~HNSwitchManager();
 
-        void setNotificationSink( SwitchManagerNotifications *sink );
+        void setDstLog( HNDaemonLog *dstPtr );
+
+        void setNotificationSink( HNSwitchManagerNotifications *sink );
         void clearNotificationSink();
 
         void setRootDirectory( std::string path );

@@ -473,42 +473,48 @@ HNSWSwitch::debugPrint( uint offset )
     std::cout << std::endl;
 }
 
-SwitchManager::SwitchManager()
+HNSwitchManager::HNSwitchManager()
 {
     rootDirPath = HNSW_ROOT_DIRECTORY_DEFAULT; 
     notifySink = NULL;
 }
 
-SwitchManager::~SwitchManager()
+HNSwitchManager::~HNSwitchManager()
 {
 }
 
 void 
-SwitchManager::setNotificationSink( SwitchManagerNotifications *sink )
+HNSwitchManager::setDstLog( HNDaemonLog *logPtr )
+{
+    log.setDstLog( logPtr );
+}
+
+void 
+HNSwitchManager::setNotificationSink( HNSwitchManagerNotifications *sink )
 {
     notifySink = sink;
 }
 
 void 
-SwitchManager::clearNotificationSink()
+HNSwitchManager::clearNotificationSink()
 {
    notifySink = NULL;
 }
 
 void 
-SwitchManager::setRootDirectory( std::string path )
+HNSwitchManager::setRootDirectory( std::string path )
 {
     rootDirPath = path;
 }
 
 std::string 
-SwitchManager::getRootDirectory()
+HNSwitchManager::getRootDirectory()
 {
     return rootDirPath;
 }
 
 HNSW_RESULT_T 
-SwitchManager::generateFilePath( std::string &fpath )
+HNSwitchManager::generateFilePath( std::string &fpath )
 {
     char tmpBuf[ 256 ];
  
@@ -533,14 +539,14 @@ SwitchManager::generateFilePath( std::string &fpath )
 }
 
 void
-SwitchManager::clear()
+HNSwitchManager::clear()
 {
     deviceName.clear();
     instanceName.clear();
 }
 
 HNSW_RESULT_T 
-SwitchManager::loadConfiguration( std::string devname, std::string instance )
+HNSwitchManager::loadConfiguration( std::string devname, std::string instance )
 {
     std::string fpath;
 
@@ -715,7 +721,7 @@ SwitchManager::loadConfiguration( std::string devname, std::string instance )
 }
 
 HNSW_RESULT_T 
-SwitchManager::initDevices()
+HNSwitchManager::initDevices()
 {
     HNSW_RESULT_T lastResult = HNSW_RESULT_SUCCESS;
 
@@ -730,7 +736,7 @@ SwitchManager::initDevices()
 }
 
 HNSW_RESULT_T 
-SwitchManager::closeDevices()
+HNSwitchManager::closeDevices()
 {
     HNSW_RESULT_T lastResult = HNSW_RESULT_SUCCESS;
 
@@ -745,7 +751,7 @@ SwitchManager::closeDevices()
 }
 
 HNSW_RESULT_T 
-SwitchManager::processOnState( std::vector< std::string > &swidOnList )
+HNSwitchManager::processOnState( std::vector< std::string > &swidOnList )
 {
     // Begin state track on each device
     for( std::map< std::string, HNSWDevice* >::iterator it = deviceMap.begin(); it != deviceMap.end(); it++ )
@@ -784,13 +790,13 @@ SwitchManager::processOnState( std::vector< std::string > &swidOnList )
 }
 
 unsigned int 
-SwitchManager::getSwitchCount()
+HNSwitchManager::getSwitchCount()
 {
     return switchMap.size();
 }
 
 HNSWSwitch *
-SwitchManager::getSwitchByIndex( int index )
+HNSwitchManager::getSwitchByIndex( int index )
 {
     uint i = 0;
     for( std::map< std::string, HNSWSwitch >::iterator it = switchMap.begin(); it != switchMap.end(); it++ )
@@ -804,7 +810,7 @@ SwitchManager::getSwitchByIndex( int index )
 }
 
 HNSWSwitch *
-SwitchManager::getSwitchByID( std::string switchID )
+HNSwitchManager::getSwitchByID( std::string switchID )
 {
     std::map< std::string, HNSWSwitch >::iterator it = switchMap.find( switchID );
 
@@ -815,7 +821,7 @@ SwitchManager::getSwitchByID( std::string switchID )
 }
 
 void
-SwitchManager::debugPrint()
+HNSwitchManager::debugPrint()
 {
     std::cout << "==== Control Device List: " << deviceName << "-" << instanceName << " ====" << std::endl;
     for( std::map< std::string, HNSWDevice* >::iterator it = deviceMap.begin(); it != deviceMap.end(); it++ )

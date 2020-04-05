@@ -15,6 +15,12 @@ HNDaemonLog::~HNDaemonLog()
 }
 
 void 
+HNDaemonLog::setLevelLimit( HNDL_LOG_LEVEL_T value )
+{
+    curLimit = value;
+}
+
+void 
 HNDaemonLog::processMsg( HNDL_LOG_LEVEL_T level, const char *format, va_list args )
 {
     if( level > curLimit )
@@ -68,3 +74,82 @@ HNDaemonLog::error( const char *format, ... )
     va_end( args );
 }
 
+
+HNDaemonLogSrc::HNDaemonLogSrc()
+{
+    logPtr = NULL;
+}
+
+HNDaemonLogSrc::~HNDaemonLogSrc()
+{
+
+}
+
+void 
+HNDaemonLogSrc::clearDstLog()
+{
+    logPtr = NULL;
+}
+
+void 
+HNDaemonLogSrc::setDstLog( HNDaemonLog *dstLog )
+{
+    logPtr = dstLog;
+}
+
+void 
+HNDaemonLogSrc::debug( const char *format, ... )
+{
+    if( logPtr == NULL )
+        return;
+
+    va_list args;
+    va_start( args, format );
+
+    logPtr->processMsg( HNDL_LOG_LEVEL_DEBUG, format, args );
+
+    va_end( args );
+}
+
+void 
+HNDaemonLogSrc::info( const char *format, ... )
+{
+    if( logPtr == NULL )
+        return;
+
+    va_list args;
+    va_start( args, format );
+
+    logPtr->processMsg( HNDL_LOG_LEVEL_INFO, format, args );
+
+    va_end( args );
+}
+
+void 
+HNDaemonLogSrc::warn( const char *format, ... )
+{
+    if( logPtr == NULL )
+        return;
+
+    va_list args;
+    va_start( args, format );
+
+    logPtr->processMsg( HNDL_LOG_LEVEL_WARN, format, args );
+
+    va_end( args );
+}
+
+void 
+HNDaemonLogSrc::error( const char *format, ... )
+{
+    if( logPtr == NULL )
+        return;
+
+    va_list args;
+    va_start( args, format );
+
+    logPtr->processMsg( HNDL_LOG_LEVEL_ERROR, format, args );
+
+    va_end( args );
+}
+        
