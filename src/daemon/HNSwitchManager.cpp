@@ -40,6 +40,12 @@ HNSWDevice::~HNSWDevice()
 }
 
 void 
+HNSWDevice::setDstLog( HNDaemonLog *dstLog )
+{
+    log.setDstLog( dstLog );
+}
+
+void 
 HNSWDevice::setModel( std::string value )
 {
     model = value;
@@ -190,14 +196,8 @@ HNSWI2CExpander::applyNextState()
 void
 HNSWI2CExpander::debugPrint( uint offset )
 {
-    std::cout << std::setw( offset ) << " ";
-    std::cout << "id: " << getID();
-    std::cout << "  class: " << "i2c-gpio-exp";
-    std::cout << "  model: " << getModel();
-    std::cout << "  devnum: " << devnum;
-    std::cout << "  busaddr: " << busaddr;
-    std::cout << "  desc: " << getDesc();
-    std::cout << std::endl;
+    log.debug( "%*.*cid: %s  class: i2c-gpio-exp  model: %s  devnum: %d  busaddr: 0x%x  desc: %s", 
+                     offset, offset, ' ', getID().c_str(), getModel().c_str(), devnum, busaddr, getDesc().c_str() );
 }
 
 bool 
@@ -463,14 +463,10 @@ HNSWSwitch::getDevParam()
 }
 
 void
-HNSWSwitch::debugPrint( uint offset )
+HNSWSwitch::debugPrint( uint offset, HNDaemonLogSrc &log )
 {
-    std::cout << std::setw( offset ) << " ";
-    std::cout << "swID: " << swID;
-    std::cout << "  devID: " << devID;
-    std::cout << "  devParam: " << devParam;
-    std::cout << "  desc: " << desc;
-    std::cout << std::endl;
+    log.debug( "%*.*cswID: %s  devID: %s  devParam: %s  desc: %s", 
+                     offset, offset, ' ', swID.c_str(), devID.c_str(), devParam.c_str(), desc.c_str() );
 }
 
 HNSwitchManager::HNSwitchManager()
@@ -560,6 +556,7 @@ HNSwitchManager::loadConfiguration( std::string devname, std::string instance )
     // Generate and verify filename
     if( generateFilePath( fpath ) != HNSW_RESULT_SUCCESS )
     {
+        log.error( "ERROR: Failed to generate path to switch config for: %s %s", devname, instance );
         return HNSW_RESULT_FAILURE;
     }    
 
@@ -567,8 +564,11 @@ HNSwitchManager::loadConfiguration( std::string devname, std::string instance )
     Poco::Path path( fpath );
     Poco::File file( path );
 
+    log.info( "Attempting to load switch config from: %s", path.toString().c_str() );
+
     if( file.exists() == false || file.isFile() == false )
     {
+        log.error( "ERROR: Switch config file does not exist: %s", path.toString().c_str() );
         return HNSW_RESULT_FAILURE;
     }
 
@@ -578,6 +578,7 @@ HNSwitchManager::loadConfiguration( std::string devname, std::string instance )
 
     if( its.is_open() == false )
     {
+        log.error( "ERROR: Switch config file open failed: %s", path.toString().c_str() );
         return HNSW_RESULT_FAILURE;
     }
 
@@ -598,13 +599,15 @@ HNSwitchManager::loadConfiguration( std::string devname, std::string instance )
             if( it->first == "devList" )
             {
                 if( jsRoot->isArray( it ) == false )
+                {
+                    log.warn( "Warning: Switch config unexpected non-array value for devList" );
                     continue;
+                }
 
                 pjs::Array::Ptr jsArr = jsRoot->getArray( it->first );
 
                 for( uint index = 0; index < jsArr->size(); index++ )
                 {
-                     std::cout << "devindx: " << index << std::endl;
                      if( jsArr->isObject( index ) == true )
                      {
                          pjs::Object::Ptr jsDev = jsArr->getObject( index );
@@ -614,10 +617,10 @@ HNSwitchManager::loadConfiguration( std::string devname, std::string instance )
                          std::string devClass = jsDev->optValue( "class", empty );
                          std::string devModel = jsDev->optValue( "model", empty );;
 
-                         std::cout << "class: " << devClass << "  model: " << devModel << std::endl;
                          if( devClass.empty() || devModel.empty() )
                          {
                              // Missing required fields.
+                             log.warn( "Warning: Switch config control device is missing required model and/or class fields." );
                              continue;
                          }
                          
@@ -625,19 +628,23 @@ HNSwitchManager::loadConfiguration( std::string devname, std::string instance )
                          if( HNSWDeviceFactory::createDeviceForClass( devClass, devModel, &devObj ) != HNSW_RESULT_SUCCESS )
                          {
                              // Unsupported control device.
+                             log.warn( "Warning: Switch config requested control device is not supported: %s, %s", devClass.c_str(), devModel.c_str() );
                              continue;
                          }  
-                                    
+
+                         // Pass through the log dst pointer                                    
+                         devObj->setDstLog( log.getDstLog() );
+
                          for( pjs::Object::ConstIterator dit = jsDev->begin(); dit != jsDev->end(); dit++ )
                          {
-                             std::cout << "dev key: " << dit->first << std::endl;
-
                              if( dit->second.isString() == false )
+                             {
+                                 log.warn( "Warning: Switch config device object contains unexpected non-string value" );                            
                                  continue;
+                             }
                                         
                              if( "id" == dit->first )
                              {
-                                 std::cout << "dev id: " << dit->second.toString() << std::endl;
                                  devObj->setID( dit->second );
                              }
                              else if( "desc" == dit->first )
@@ -650,19 +657,21 @@ HNSwitchManager::loadConfiguration( std::string devname, std::string instance )
                              }
                          }
 
-                         std::cout << "dev insert: " << devObj->getID() << std::endl;
                          deviceMap.insert( std::pair< std::string, HNSWDevice* >( devObj->getID(), devObj ) );
                      }
                      else
                      {
-                         // Unrecognized config element at array layer
+                         log.warn( "Warning: Switch config devList contains an unexpected non-object value" );                            
                      }
                 }
             }
             else if( it->first == "switchList" )
             {
                 if( jsRoot->isArray( it ) == false )
+                {
+                    log.warn( "Warning: Switch config unexpected non-array value for switchList" );
                     continue;
+                }
 
                 pjs::Array::Ptr jsArr = jsRoot->getArray( it->first );
 
@@ -677,7 +686,10 @@ HNSwitchManager::loadConfiguration( std::string devname, std::string instance )
                          for( pjs::Object::ConstIterator dit = jsSwitch->begin(); dit != jsSwitch->end(); dit++ )
                          {
                              if( dit->second.isString() == false )
+                             {
+                                 log.warn( "Warning: Switch config switch definition contains unexpected non-string value" );
                                  continue;
+                             }
                                         
                              if( "swid" == dit->first )
                              {
@@ -701,7 +713,7 @@ HNSwitchManager::loadConfiguration( std::string devname, std::string instance )
                      }
                      else
                      {
-                         // Unrecognized config element at array layer
+                         log.warn( "Warning: Switch config switchList contains an unexpected non-object value" );                            
                      }
                 }
             }
@@ -709,12 +721,15 @@ HNSwitchManager::loadConfiguration( std::string devname, std::string instance )
     }
     catch( Poco::Exception ex )
     {
+        log.error( "ERROR: Switch config file json parse failure: %s", ex.displayText().c_str() );
         its.close();
         return HNSW_RESULT_FAILURE;
     }
     
     // 
     debugPrint();
+
+    log.info( "Switch config successfully loaded." );
 
     // Done
     return HNSW_RESULT_SUCCESS;
@@ -823,16 +838,17 @@ HNSwitchManager::getSwitchByID( std::string switchID )
 void
 HNSwitchManager::debugPrint()
 {
-    std::cout << "==== Control Device List: " << deviceName << "-" << instanceName << " ====" << std::endl;
+    log.debug( "==== Control Device List: %s-%s ====", deviceName.c_str(), instanceName.c_str() );
+ 
     for( std::map< std::string, HNSWDevice* >::iterator it = deviceMap.begin(); it != deviceMap.end(); it++ )
     {
         (it->second)->debugPrint( 2 );
     }
 
-    std::cout << "==== Control Switch List: " << deviceName << "-" << instanceName << " ====" << std::endl;
+    log.debug( "==== Control Switch List: %s-%s ====", deviceName.c_str(), instanceName.c_str() );
     for( std::map< std::string, HNSWSwitch >::iterator it = switchMap.begin(); it != switchMap.end(); it++ )
     {
-        it->second.debugPrint( 2 );
+        it->second.debugPrint( 2, log );
     }
 }
 

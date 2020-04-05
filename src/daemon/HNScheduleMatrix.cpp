@@ -338,7 +338,7 @@ HNScheduleMatrix::loadSchedule( std::string devname, std::string instance )
     // Generate and verify filename
     if( generateFilePath( fpath ) != HNSM_RESULT_SUCCESS )
     {
-        log.error( "ERROR: Failed to schedule matrix file path for: %s %s", devname, instance );
+        log.error( "ERROR: Failed to generate path to schedule matrix config for: %s %s", devname, instance );
         return HNSM_RESULT_FAILURE;
     }    
 

@@ -23,9 +23,14 @@ class HNSWDevice
         std::string desc;
         std::string model;
 
+    protected:
+        HNDaemonLogSrc log;
+
     public:
         HNSWDevice();
        ~HNSWDevice();
+
+        void setDstLog( HNDaemonLog *dstLog );
 
         void setModel( std::string value );
         void setID( std::string value );
@@ -128,7 +133,7 @@ class HNSWSwitch
         std::string getDevID();
         std::string getDevParam();
 
-        void debugPrint( uint offset );
+        void debugPrint( uint offset, HNDaemonLogSrc &log );
 };
 
 class HNSwitchManagerNotifications

@@ -46,6 +46,7 @@ class HNDaemonLogSrc
 
         void clearDstLog();
         void setDstLog( HNDaemonLog *dstLog );
+        HNDaemonLog *getDstLog();
 
         void debug( const char *format, ... );
         void info( const char *format, ... );

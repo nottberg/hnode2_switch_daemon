@@ -97,6 +97,12 @@ HNDaemonLogSrc::setDstLog( HNDaemonLog *dstLog )
     logPtr = dstLog;
 }
 
+HNDaemonLog*
+HNDaemonLogSrc::getDstLog()
+{
+    return logPtr;
+}
+
 void 
 HNDaemonLogSrc::debug( const char *format, ... )
 {
