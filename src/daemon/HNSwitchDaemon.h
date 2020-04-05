@@ -9,7 +9,7 @@
 #include "Poco/Util/ServerApplication.h"
 #include "Poco/Util/OptionSet.h"
 
-#include "SwitchManager.h"
+#include "HNSwitchManager.h"
 #include "HNScheduleMatrix.h"
 
 class ClientRecord

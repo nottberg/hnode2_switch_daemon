@@ -24,71 +24,71 @@ extern "C"{
 #include <Poco/JSON/Object.h>
 #include <Poco/JSON/Parser.h>
 
-#include "SwitchManager.h"
+#include "HNSwitchManager.h"
 
 namespace pjs = Poco::JSON;
 namespace pdy = Poco::Dynamic;
 
-SWMDevice::SWMDevice()
+HNSWDevice::HNSWDevice()
 {
 
 }
 
-SWMDevice::~SWMDevice()
+HNSWDevice::~HNSWDevice()
 {
 
 }
 
 void 
-SWMDevice::setModel( std::string value )
+HNSWDevice::setModel( std::string value )
 {
     model = value;
 }
 
 void 
-SWMDevice::setID( std::string value )
+HNSWDevice::setID( std::string value )
 {
     id = value;
 }
 
 void 
-SWMDevice::setDesc( std::string value )
+HNSWDevice::setDesc( std::string value )
 {
     desc = value;
 }
 
 std::string 
-SWMDevice::getModel()
+HNSWDevice::getModel()
 {
     return model;
 }
 
 std::string 
-SWMDevice::getID()
+HNSWDevice::getID()
 {
     return id;
 }
 
 std::string 
-SWMDevice::getDesc()
+HNSWDevice::getDesc()
 {
     return desc;
 }
 
-SWMI2CExpander::SWMI2CExpander()
+HNSWI2CExpander::HNSWI2CExpander()
 {
     devnum  = 0;
     busaddr = 0;
     i2cfd   = 0;
 }
 
-SWMI2CExpander::~SWMI2CExpander()
+HNSWI2CExpander::~HNSWI2CExpander()
 {
     closeDevice();
 }
 
 void 
-SWMI2CExpander::parsePair( std::string key, std::string value )
+HNSWI2CExpander::parsePair( std::string key, std::string value )
 {
     if( "devnum" == key )
     {
@@ -100,77 +100,77 @@ SWMI2CExpander::parsePair( std::string key, std::string value )
     }
 }
 
-SWM_RESULT_T 
-SWMI2CExpander::initDevice()
+HNSW_RESULT_T 
+HNSWI2CExpander::initDevice()
 {
     if( getModel() == "mcp23008" )
     {
         return mcp23008Init();
     }
 
-    return SWM_RESULT_FAILURE;
+    return HNSW_RESULT_FAILURE;
 }
 
-SWM_RESULT_T 
-SWMI2CExpander::closeDevice()
+HNSW_RESULT_T 
+HNSWI2CExpander::closeDevice()
 {
     if( getModel() == "mcp23008" )
     {
         return mcp23008Close();
     }
 
-    return SWM_RESULT_FAILURE;
+    return HNSW_RESULT_FAILURE;
 }
 
-SWM_RESULT_T 
-SWMI2CExpander::restartDevice()
+HNSW_RESULT_T 
+HNSWI2CExpander::restartDevice()
 {
-    SWM_RESULT_T result;
+    HNSW_RESULT_T result;
 
     result = closeDevice();
 
-    if( result != SWM_RESULT_SUCCESS )
+    if( result != HNSW_RESULT_SUCCESS )
         return result;
 
     return initDevice();
 }
 
 void 
-SWMI2CExpander::initNextState()
+HNSWI2CExpander::initNextState()
 {
     nextState = 0;
 }
 
-SWM_RESULT_T 
-SWMI2CExpander::updateStateToOn( std::string param )
+HNSW_RESULT_T 
+HNSWI2CExpander::updateStateToOn( std::string param )
 {
     if( getModel() == "mcp23008" )
     {
         uint bitPos = strtol( param.c_str(), NULL, 0 );
 
         if( bitPos > 7 )
-            return SWM_RESULT_FAILURE;
+            return HNSW_RESULT_FAILURE;
 
         nextState |= (1 << bitPos);
 
-        return SWM_RESULT_SUCCESS;
+        return HNSW_RESULT_SUCCESS;
     }
 
-    return SWM_RESULT_FAILURE;
+    return HNSW_RESULT_FAILURE;
 }
 
-SWM_RESULT_T 
-SWMI2CExpander::applyNextState()
+HNSW_RESULT_T 
+HNSWI2CExpander::applyNextState()
 {
     if( getModel() == "mcp23008" )
     {
-        SWM_RESULT_T result;
+        HNSW_RESULT_T result;
         uint curState;
 
         // Read the current state
         result = mcp23008GetPortState( curState );
    
-        if( result != SWM_RESULT_SUCCESS )
+        if( result != HNSW_RESULT_SUCCESS )
             return result;
 
         // If nextState is different
@@ -181,14 +181,14 @@ SWMI2CExpander::applyNextState()
         }
 
         // No change
-        return SWM_RESULT_SUCCESS;
+        return HNSW_RESULT_SUCCESS;
     }
 
-    return SWM_RESULT_FAILURE;
+    return HNSW_RESULT_FAILURE;
 }
 
 void
-SWMI2CExpander::debugPrint( uint offset )
+HNSWI2CExpander::debugPrint( uint offset )
 {
     std::cout << std::setw( offset ) << " ";
     std::cout << "id: " << getID();
@@ -201,7 +201,7 @@ SWMI2CExpander::debugPrint( uint offset )
 }
 
 bool 
-SWMI2CExpander::supportedModel( std::string model )
+HNSWI2CExpander::supportedModel( std::string model )
 {
     if( model == "mcp23008" )
         return true;
@@ -219,8 +219,8 @@ typedef enum MCP230xxRegisterAddresses
     MCP23008_OLAT   = 0x0A,
 }MCP_REG_ADDR;
 
-SWM_RESULT_T 
-SWMI2CExpander::mcp23008Init()
+HNSW_RESULT_T 
+HNSWI2CExpander::mcp23008Init()
 {
     char devfn[256];
 
@@ -238,7 +238,7 @@ SWMI2CExpander::mcp23008Init()
     {
         printf( "Failed to acquire bus access and/or talk to slave.\n" ); 
         perror("Failed to open the i2c bus");
-        return SWM_RESULT_FAILURE;
+        return HNSW_RESULT_FAILURE;
     }
 
     // Tell the device which endpoint we want to talk to.
@@ -246,46 +246,46 @@ SWMI2CExpander::mcp23008Init()
     {
         printf( "Failed to acquire bus access and/or talk to slave.\n" );
         /* ERROR HANDLING; you can check errno to see what went wrong */
-        return SWM_RESULT_FAILURE;
+        return HNSW_RESULT_FAILURE;
     }
 
     // Clear all of the outputs initially.
-    if( mcp23008SetPortState( 0 ) != SWM_RESULT_SUCCESS )
+    if( mcp23008SetPortState( 0 ) != HNSW_RESULT_SUCCESS )
     {
-        return SWM_RESULT_FAILURE;
+        return HNSW_RESULT_FAILURE;
     }
 
     // Init the IO direction (inbound) and pullup (off) settings
-    if( mcp23008SetPortMode( 0xFF ) != SWM_RESULT_SUCCESS )
+    if( mcp23008SetPortMode( 0xFF ) != HNSW_RESULT_SUCCESS )
     {
-        return SWM_RESULT_FAILURE;
+        return HNSW_RESULT_FAILURE;
     }
 
-    if( mcp23008SetPortPullup( 0x00 ) != SWM_RESULT_SUCCESS )
+    if( mcp23008SetPortPullup( 0x00 ) != HNSW_RESULT_SUCCESS )
     {
-        return SWM_RESULT_FAILURE;
+        return HNSW_RESULT_FAILURE;
     }
 
     // Read and intial value from the device.
     uint currentState;
-    if( mcp23008GetPortState( currentState ) != SWM_RESULT_SUCCESS )
+    if( mcp23008GetPortState( currentState ) != HNSW_RESULT_SUCCESS )
     {
-        return SWM_RESULT_FAILURE;
+        return HNSW_RESULT_FAILURE;
     }
 
     printf( "Initial Value Read: %d\n", currentState );
 
     // Turn all of the pins over to outputs
-    if( mcp23008SetPortMode( 0x00 ) != SWM_RESULT_SUCCESS )
+    if( mcp23008SetPortMode( 0x00 ) != HNSW_RESULT_SUCCESS )
     {
-        return SWM_RESULT_FAILURE;
+        return HNSW_RESULT_FAILURE;
     }
 
-    return SWM_RESULT_SUCCESS;
+    return HNSW_RESULT_SUCCESS;
 }
 
-SWM_RESULT_T 
-SWMI2CExpander::mcp23008Close()
+HNSW_RESULT_T 
+HNSWI2CExpander::mcp23008Close()
 {
     if( i2cfd != 0 )
     {
@@ -293,110 +293,110 @@ SWMI2CExpander::mcp23008Close()
         i2cfd = 0;
     }
 
-    return SWM_RESULT_SUCCESS;
+    return HNSW_RESULT_SUCCESS;
 }
 
-SWM_RESULT_T 
-SWMI2CExpander::mcp23008GetPortMode( uint &value )
+HNSW_RESULT_T 
+HNSWI2CExpander::mcp23008GetPortMode( uint &value )
 {
     int32_t result;
 
     result = i2c_smbus_read_byte_data( i2cfd, MCP23008_IODIR );
 
     if( result < 0 )
-        return SWM_RESULT_FAILURE;
+        return HNSW_RESULT_FAILURE;
 
     value = ( result & 0xFF );
 
-    return SWM_RESULT_SUCCESS;
+    return HNSW_RESULT_SUCCESS;
 }
 
-SWM_RESULT_T 
-SWMI2CExpander::mcp23008GetPortPullup( uint &value )
+HNSW_RESULT_T 
+HNSWI2CExpander::mcp23008GetPortPullup( uint &value )
 {
     int32_t result;
 
     result = i2c_smbus_read_byte_data( i2cfd, MCP23008_GPPU );
 
     if( result < 0 )
-        return SWM_RESULT_FAILURE;
+        return HNSW_RESULT_FAILURE;
 
     value = ( result & 0xFF );
 
-    return SWM_RESULT_SUCCESS;
+    return HNSW_RESULT_SUCCESS;
 }
 
-SWM_RESULT_T 
-SWMI2CExpander::mcp23008GetPortState( uint &value )
+HNSW_RESULT_T 
+HNSWI2CExpander::mcp23008GetPortState( uint &value )
 {
     int32_t result;
 
     result = i2c_smbus_read_byte_data( i2cfd, MCP23008_GPIO );
 
     if( result < 0 )
-        return SWM_RESULT_FAILURE;
+        return HNSW_RESULT_FAILURE;
 
     value = ( result & 0xFF );
 
-    return SWM_RESULT_SUCCESS;
+    return HNSW_RESULT_SUCCESS;
 }
 
-SWM_RESULT_T
-SWMI2CExpander::mcp23008SetPortMode( uint value )
+HNSW_RESULT_T
+HNSWI2CExpander::mcp23008SetPortMode( uint value )
 {
     int32_t result;
 
     result = i2c_smbus_write_byte_data( i2cfd, MCP23008_IODIR, value );
 
     if( result < 0 )
-        return SWM_RESULT_FAILURE;
+        return HNSW_RESULT_FAILURE;
 
-    return SWM_RESULT_SUCCESS;
+    return HNSW_RESULT_SUCCESS;
 }
 
-SWM_RESULT_T 
-SWMI2CExpander::mcp23008SetPortPullup( uint value )
+HNSW_RESULT_T 
+HNSWI2CExpander::mcp23008SetPortPullup( uint value )
 {
     int32_t result;
 
     result = i2c_smbus_write_byte_data( i2cfd, MCP23008_GPPU, value );
 
     if( result < 0 )
-        return SWM_RESULT_FAILURE;
+        return HNSW_RESULT_FAILURE;
 
-    return SWM_RESULT_SUCCESS;
+    return HNSW_RESULT_SUCCESS;
 }
 
-SWM_RESULT_T 
-SWMI2CExpander::mcp23008SetPortState( uint value )
+HNSW_RESULT_T 
+HNSWI2CExpander::mcp23008SetPortState( uint value )
 {
     int32_t result;
 
     result = i2c_smbus_write_byte_data( i2cfd, MCP23008_OLAT, value );
 
     if( result < 0 )
-        return SWM_RESULT_FAILURE;
+        return HNSW_RESULT_FAILURE;
 
-    return SWM_RESULT_SUCCESS;
+    return HNSW_RESULT_SUCCESS;
 }
 
 
-SWM_RESULT_T 
-SWMDeviceFactory::createDeviceForClass( std::string devClass, std::string devModel, SWMDevice **devObj )
+HNSW_RESULT_T 
+HNSWDeviceFactory::createDeviceForClass( std::string devClass, std::string devModel, HNSWDevice **devObj )
 {
     *devObj = NULL;
     if( devClass == "i2c-gpio-exp" )
     {
-        *devObj = new SWMI2CExpander;
+        *devObj = new HNSWI2CExpander;
         (*devObj)->setModel( devModel );
-        return SWM_RESULT_SUCCESS;
+        return HNSW_RESULT_SUCCESS;
     }
 
-    return SWM_RESULT_FAILURE;
+    return HNSW_RESULT_FAILURE;
 }
 
 void 
-SWMDeviceFactory::destroyDevice( SWMDevice *devObj )
+HNSWDeviceFactory::destroyDevice( HNSWDevice *devObj )
 {
     if( devObj == NULL )
         return;
@@ -404,66 +404,66 @@ SWMDeviceFactory::destroyDevice( SWMDevice *devObj )
     delete devObj;
 }
 
-SWMSwitch::SWMSwitch()
+HNSWSwitch::HNSWSwitch()
 {
 
 }
 
-SWMSwitch::~SWMSwitch()
+HNSWSwitch::~HNSWSwitch()
 {
 
 }
 
 void 
-SWMSwitch::setSWID( std::string value )
+HNSWSwitch::setSWID( std::string value )
 {
     swID = value;
 }
 
 void 
-SWMSwitch::setDesc( std::string value )
+HNSWSwitch::setDesc( std::string value )
 {
     desc = value;
 }
 
 void 
-SWMSwitch::setDevID( std::string value )
+HNSWSwitch::setDevID( std::string value )
 {
     devID = value;
 }
 
 void 
-SWMSwitch::setDevParam( std::string value )
+HNSWSwitch::setDevParam( std::string value )
 {
     devParam = value;
 }
 
 std::string 
-SWMSwitch::getSWID()
+HNSWSwitch::getSWID()
 {
     return swID;
 }
 
 std::string 
-SWMSwitch::getDesc()
+HNSWSwitch::getDesc()
 {
     return desc;
 }
 
 std::string 
-SWMSwitch::getDevID()
+HNSWSwitch::getDevID()
 {
     return devID;
 }
 
 std::string 
-SWMSwitch::getDevParam()
+HNSWSwitch::getDevParam()
 {
     return devParam;
 }
 
 void
-SWMSwitch::debugPrint( uint offset )
+HNSWSwitch::debugPrint( uint offset )
 {
     std::cout << std::setw( offset ) << " ";
     std::cout << "swID: " << swID;
@@ -475,7 +475,7 @@ SWMSwitch::debugPrint( uint offset )
 
 SwitchManager::SwitchManager()
 {
-    rootDirPath = SWM_ROOT_DIRECTORY_DEFAULT; 
+    rootDirPath = HNSW_ROOT_DIRECTORY_DEFAULT; 
     notifySink = NULL;
 }
 
@@ -507,7 +507,7 @@ SwitchManager::getRootDirectory()
     return rootDirPath;
 }
 
-SWM_RESULT_T 
+HNSW_RESULT_T 
 SwitchManager::generateFilePath( std::string &fpath )
 {
     char tmpBuf[ 256 ];
@@ -515,10 +515,10 @@ SwitchManager::generateFilePath( std::string &fpath )
     fpath.clear();
 
     if( deviceName.empty() == true )
-        return SWM_RESULT_FAILURE;
+        return HNSW_RESULT_FAILURE;
 
     if( instanceName.empty() == true )
-        return SWM_RESULT_FAILURE;
+        return HNSW_RESULT_FAILURE;
   
     sprintf( tmpBuf, "%s-%s", deviceName.c_str(), instanceName.c_str() );
 
@@ -529,7 +529,7 @@ SwitchManager::generateFilePath( std::string &fpath )
 
     fpath = path.toString();
 
-    return SWM_RESULT_SUCCESS;
+    return HNSW_RESULT_SUCCESS;
 }
 
 void
@@ -539,7 +539,7 @@ SwitchManager::clear()
     instanceName.clear();
 }
 
-SWM_RESULT_T 
+HNSW_RESULT_T 
 SwitchManager::loadConfiguration( std::string devname, std::string instance )
 {
     std::string fpath;
@@ -552,9 +552,9 @@ SwitchManager::loadConfiguration( std::string devname, std::string instance )
     instanceName = instance;
 
     // Generate and verify filename
-    if( generateFilePath( fpath ) != SWM_RESULT_SUCCESS )
+    if( generateFilePath( fpath ) != HNSW_RESULT_SUCCESS )
     {
-        return SWM_RESULT_FAILURE;
+        return HNSW_RESULT_FAILURE;
     }    
 
     // Build target file path and verify existance
@@ -563,7 +563,7 @@ SwitchManager::loadConfiguration( std::string devname, std::string instance )
 
     if( file.exists() == false || file.isFile() == false )
     {
-        return SWM_RESULT_FAILURE;
+        return HNSW_RESULT_FAILURE;
     }
 
     // Open a stream for reading
@@ -572,7 +572,7 @@ SwitchManager::loadConfiguration( std::string devname, std::string instance )
 
     if( its.is_open() == false )
     {
-        return SWM_RESULT_FAILURE;
+        return HNSW_RESULT_FAILURE;
     }
 
     // Invoke the json parser
@@ -615,8 +615,8 @@ SwitchManager::loadConfiguration( std::string devname, std::string instance )
                              continue;
                          }
                          
-                         SWMDevice *devObj;
-                         if( SWMDeviceFactory::createDeviceForClass( devClass, devModel, &devObj ) != SWM_RESULT_SUCCESS )
+                         HNSWDevice *devObj;
+                         if( HNSWDeviceFactory::createDeviceForClass( devClass, devModel, &devObj ) != HNSW_RESULT_SUCCESS )
                          {
                              // Unsupported control device.
                              continue;
@@ -645,7 +645,7 @@ SwitchManager::loadConfiguration( std::string devname, std::string instance )
                          }
 
                          std::cout << "dev insert: " << devObj->getID() << std::endl;
-                         deviceMap.insert( std::pair< std::string, SWMDevice* >( devObj->getID(), devObj ) );
+                         deviceMap.insert( std::pair< std::string, HNSWDevice* >( devObj->getID(), devObj ) );
                      }
                      else
                      {
@@ -666,7 +666,7 @@ SwitchManager::loadConfiguration( std::string devname, std::string instance )
                      {
                          pjs::Object::Ptr jsSwitch = jsArr->getObject( index );
 
-                         SWMSwitch nSW;
+                         HNSWSwitch nSW;
                                    
                          for( pjs::Object::ConstIterator dit = jsSwitch->begin(); dit != jsSwitch->end(); dit++ )
                          {
@@ -691,7 +691,7 @@ SwitchManager::loadConfiguration( std::string devname, std::string instance )
                              }
                          }
 
-                         switchMap.insert( std::pair< std::string, SWMSwitch >( nSW.getSWID(), nSW ) );
+                         switchMap.insert( std::pair< std::string, HNSWSwitch >( nSW.getSWID(), nSW ) );
                      }
                      else
                      {
@@ -704,58 +704,58 @@ SwitchManager::loadConfiguration( std::string devname, std::string instance )
     catch( Poco::Exception ex )
     {
         its.close();
-        return SWM_RESULT_FAILURE;
+        return HNSW_RESULT_FAILURE;
     }
     
     // 
     debugPrint();
 
     // Done
-    return SWM_RESULT_SUCCESS;
+    return HNSW_RESULT_SUCCESS;
 }
 
-SWM_RESULT_T 
+HNSW_RESULT_T 
 SwitchManager::initDevices()
 {
-    SWM_RESULT_T lastResult = SWM_RESULT_SUCCESS;
+    HNSW_RESULT_T lastResult = HNSW_RESULT_SUCCESS;
 
-    for( std::map< std::string, SWMDevice* >::iterator it = deviceMap.begin(); it != deviceMap.end(); it++ )
+    for( std::map< std::string, HNSWDevice* >::iterator it = deviceMap.begin(); it != deviceMap.end(); it++ )
     {
-        SWM_RESULT_T result = it->second->initDevice();
-        if( result != SWM_RESULT_SUCCESS )
+        HNSW_RESULT_T result = it->second->initDevice();
+        if( result != HNSW_RESULT_SUCCESS )
             lastResult = result;
     }
 
     return lastResult;
 }
 
-SWM_RESULT_T 
+HNSW_RESULT_T 
 SwitchManager::closeDevices()
 {
-    SWM_RESULT_T lastResult = SWM_RESULT_SUCCESS;
+    HNSW_RESULT_T lastResult = HNSW_RESULT_SUCCESS;
 
-    for( std::map< std::string, SWMDevice* >::iterator it = deviceMap.begin(); it != deviceMap.end(); it++ )
+    for( std::map< std::string, HNSWDevice* >::iterator it = deviceMap.begin(); it != deviceMap.end(); it++ )
     {
-        SWM_RESULT_T result = it->second->closeDevice();
-        if( result != SWM_RESULT_SUCCESS )
+        HNSW_RESULT_T result = it->second->closeDevice();
+        if( result != HNSW_RESULT_SUCCESS )
             lastResult = result;
     }
 
     return lastResult;
 }
 
-SWM_RESULT_T 
+HNSW_RESULT_T 
 SwitchManager::processOnState( std::vector< std::string > &swidOnList )
 {
     // Begin state track on each device
-    for( std::map< std::string, SWMDevice* >::iterator it = deviceMap.begin(); it != deviceMap.end(); it++ )
+    for( std::map< std::string, HNSWDevice* >::iterator it = deviceMap.begin(); it != deviceMap.end(); it++ )
         it->second->initNextState();
 
     // Walk provided list of ON switches
     for( std::vector< std::string >::iterator it = swidOnList.begin(); it != swidOnList.end(); it++ )
     {
         // Find the referenced switch record
-        std::map< std::string, SWMSwitch >::iterator sit = switchMap.find( *it );
+        std::map< std::string, HNSWSwitch >::iterator sit = switchMap.find( *it );
 
         if( sit == switchMap.end() )
         {
@@ -764,7 +764,7 @@ SwitchManager::processOnState( std::vector< std::string > &swidOnList )
         }
 
         // Find the controlling device record
-        std::map< std::string, SWMDevice* >::iterator dit = deviceMap.find( sit->second.getDevID() );
+        std::map< std::string, HNSWDevice* >::iterator dit = deviceMap.find( sit->second.getDevID() );
 
         if( dit == deviceMap.end() )
         {
@@ -777,10 +777,10 @@ SwitchManager::processOnState( std::vector< std::string > &swidOnList )
     } 
 
     // Apply any generated state changes
-    for( std::map< std::string, SWMDevice* >::iterator it = deviceMap.begin(); it != deviceMap.end(); it++ )
+    for( std::map< std::string, HNSWDevice* >::iterator it = deviceMap.begin(); it != deviceMap.end(); it++ )
         it->second->applyNextState();
 
-    return SWM_RESULT_SUCCESS;
+    return HNSW_RESULT_SUCCESS;
 }
 
 unsigned int 
@@ -789,11 +789,11 @@ SwitchManager::getSwitchCount()
     return switchMap.size();
 }
 
-SWMSwitch *
+HNSWSwitch *
 SwitchManager::getSwitchByIndex( int index )
 {
     uint i = 0;
-    for( std::map< std::string, SWMSwitch >::iterator it = switchMap.begin(); it != switchMap.end(); it++ )
+    for( std::map< std::string, HNSWSwitch >::iterator it = switchMap.begin(); it != switchMap.end(); it++ )
     {
         if( i == index )
             return &(it->second);
@@ -803,10 +803,10 @@ SwitchManager::getSwitchByIndex( int index )
     return NULL;
 }
 
-SWMSwitch *
+HNSWSwitch *
 SwitchManager::getSwitchByID( std::string switchID )
 {
-    std::map< std::string, SWMSwitch >::iterator it = switchMap.find( switchID );
+    std::map< std::string, HNSWSwitch >::iterator it = switchMap.find( switchID );
 
     if( it == switchMap.end() )
         return NULL;
@@ -818,13 +818,13 @@ void
 SwitchManager::debugPrint()
 {
     std::cout << "==== Control Device List: " << deviceName << "-" << instanceName << " ====" << std::endl;
-    for( std::map< std::string, SWMDevice* >::iterator it = deviceMap.begin(); it != deviceMap.end(); it++ )
+    for( std::map< std::string, HNSWDevice* >::iterator it = deviceMap.begin(); it != deviceMap.end(); it++ )
     {
         (it->second)->debugPrint( 2 );
     }
 
     std::cout << "==== Control Switch List: " << deviceName << "-" << instanceName << " ====" << std::endl;
-    for( std::map< std::string, SWMSwitch >::iterator it = switchMap.begin(); it != switchMap.end(); it++ )
+    for( std::map< std::string, HNSWSwitch >::iterator it = switchMap.begin(); it != switchMap.end(); it++ )
     {
         it->second.debugPrint( 2 );
     }

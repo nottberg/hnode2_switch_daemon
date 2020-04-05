@@ -10,13 +10,13 @@
 #include <libxml/parser.h>
 #include <libxml/tree.h>
 
-typedef enum SwitchManagerResultEnum
+typedef enum HNSwitchManagerResultEnum
 {
-    SWM_RESULT_SUCCESS,
-    SWM_RESULT_FAILURE
-}SWM_RESULT_T;
+    HNSW_RESULT_SUCCESS,
+    HNSW_RESULT_FAILURE
+}HNSW_RESULT_T;
 
-class SWMDevice
+class HNSWDevice
 {
     private:
         std::string id;
@@ -24,8 +24,8 @@ class SWMDevice
         std::string model;
 
     public:
-        SWMDevice();
-       ~SWMDevice();
+        HNSWDevice();
+       ~HNSWDevice();
 
         void setModel( std::string value );
         void setID( std::string value );
@@ -38,17 +38,17 @@ class SWMDevice
         virtual void parsePair( std::string, std::string ) = 0;
         virtual void debugPrint( uint offset ) = 0;
 
-        virtual SWM_RESULT_T initDevice() = 0;
-        virtual SWM_RESULT_T closeDevice() = 0;
-        virtual SWM_RESULT_T restartDevice() = 0;
+        virtual HNSW_RESULT_T initDevice() = 0;
+        virtual HNSW_RESULT_T closeDevice() = 0;
+        virtual HNSW_RESULT_T restartDevice() = 0;
 
         virtual void initNextState() = 0;
-        virtual SWM_RESULT_T updateStateToOn( std::string param ) = 0;
-        virtual SWM_RESULT_T applyNextState() = 0;
+        virtual HNSW_RESULT_T updateStateToOn( std::string param ) = 0;
+        virtual HNSW_RESULT_T applyNextState() = 0;
 
 };
 
-class SWMI2CExpander : public SWMDevice
+class HNSWI2CExpander : public HNSWDevice
 {
     private:
         uint devnum;
@@ -59,45 +59,45 @@ class SWMI2CExpander : public SWMDevice
         uint32_t nextState;
 
         // MCP23008 interface routines
-        SWM_RESULT_T mcp23008Init();
-        SWM_RESULT_T mcp23008Close();
+        HNSW_RESULT_T mcp23008Init();
+        HNSW_RESULT_T mcp23008Close();
 
-        SWM_RESULT_T mcp23008SetPortMode( uint value );
-        SWM_RESULT_T mcp23008SetPortPullup( uint value );
-        SWM_RESULT_T mcp23008SetPortState( uint value );
+        HNSW_RESULT_T mcp23008SetPortMode( uint value );
+        HNSW_RESULT_T mcp23008SetPortPullup( uint value );
+        HNSW_RESULT_T mcp23008SetPortState( uint value );
 
-        SWM_RESULT_T mcp23008GetPortMode( uint &value );
-        SWM_RESULT_T mcp23008GetPortPullup( uint &value );
-        SWM_RESULT_T mcp23008GetPortState( uint &value );
+        HNSW_RESULT_T mcp23008GetPortMode( uint &value );
+        HNSW_RESULT_T mcp23008GetPortPullup( uint &value );
+        HNSW_RESULT_T mcp23008GetPortState( uint &value );
 
     public:
-        SWMI2CExpander();
-       ~SWMI2CExpander(); 
+        HNSWI2CExpander();
+       ~HNSWI2CExpander(); 
 
         void parsePair( std::string key, std::string value );
 
-        SWM_RESULT_T initDevice();
-        SWM_RESULT_T closeDevice();
-        SWM_RESULT_T restartDevice();
+        HNSW_RESULT_T initDevice();
+        HNSW_RESULT_T closeDevice();
+        HNSW_RESULT_T restartDevice();
 
         void initNextState();
-        SWM_RESULT_T updateStateToOn( std::string param );
-        SWM_RESULT_T applyNextState();
+        HNSW_RESULT_T updateStateToOn( std::string param );
+        HNSW_RESULT_T applyNextState();
 
         void debugPrint( uint offset );
 
         static bool supportedModel( std::string model );
 };
 
-class SWMDeviceFactory
+class HNSWDeviceFactory
 {
     public:
-        static SWM_RESULT_T createDeviceForClass( std::string devClass, std::string devModel, SWMDevice **devObj );
+        static HNSW_RESULT_T createDeviceForClass( std::string devClass, std::string devModel, HNSWDevice **devObj );
 
-        static void destroyDevice( SWMDevice *devObj );
+        static void destroyDevice( HNSWDevice *devObj );
 };
 
-class SWMSwitch
+class HNSWSwitch
 {
     private:
         // the identifier of the the switch itself
@@ -115,8 +115,8 @@ class SWMSwitch
         std::string desc;     
 
     public:
-        SWMSwitch();
-       ~SWMSwitch();
+        HNSWSwitch();
+       ~HNSWSwitch();
 
         void setSWID( std::string value );
         void setDesc( std::string value );
@@ -138,7 +138,7 @@ class SwitchManagerNotifications
         virtual void signalRunning() = 0;
 };
 
-#define SWM_ROOT_DIRECTORY_DEFAULT "/var/cache/hnode2"
+#define HNSW_ROOT_DIRECTORY_DEFAULT "/var/cache/hnode2"
 
 class SwitchManager
 {
@@ -149,10 +149,10 @@ class SwitchManager
         std::string deviceName;
         std::string instanceName;
 
-        std::map< std::string, SWMDevice* > deviceMap;
-        std::map< std::string, SWMSwitch >  switchMap;
+        std::map< std::string, HNSWDevice* > deviceMap;
+        std::map< std::string, HNSWSwitch >  switchMap;
 
-        SWM_RESULT_T generateFilePath( std::string &fpath );
+        HNSW_RESULT_T generateFilePath( std::string &fpath );
 
     public:
         SwitchManager();
@@ -166,16 +166,16 @@ class SwitchManager
 
         void clear();
 
-        SWM_RESULT_T loadConfiguration( std::string devname, std::string instance );
+        HNSW_RESULT_T loadConfiguration( std::string devname, std::string instance );
 
-        SWM_RESULT_T initDevices();
-        SWM_RESULT_T closeDevices();
+        HNSW_RESULT_T initDevices();
+        HNSW_RESULT_T closeDevices();
 
         unsigned int getSwitchCount();
-        SWMSwitch* getSwitchByIndex( int index );
-        SWMSwitch* getSwitchByID( std::string swid );
+        HNSWSwitch* getSwitchByIndex( int index );
+        HNSWSwitch* getSwitchByID( std::string swid );
 
-        SWM_RESULT_T processOnState( std::vector< std::string > &swidOnList );
+        HNSW_RESULT_T processOnState( std::vector< std::string > &swidOnList );
 
         void debugPrint();
 };
