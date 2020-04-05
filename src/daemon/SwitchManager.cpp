@@ -255,8 +255,8 @@ SWMI2CExpander::mcp23008Init()
         return SWM_RESULT_FAILURE;
     }
 
-    // Init the IO direction and pullup settings
-    if( mcp23008SetPortMode( 0x00 ) != SWM_RESULT_SUCCESS )
+    // Init the IO direction (inbound) and pullup (off) settings
+    if( mcp23008SetPortMode( 0xFF ) != SWM_RESULT_SUCCESS )
     {
         return SWM_RESULT_FAILURE;
     }
@@ -266,9 +266,6 @@ SWMI2CExpander::mcp23008Init()
         return SWM_RESULT_FAILURE;
     }
 
-    //i2c_smbus_write_byte_data( i2cfd, MCP23008_IODIR, 0 );
-    //i2c_smbus_write_byte_data( i2cfd, MCP23008_GPPU, 0 );
-
     // Read and intial value from the device.
     uint currentState;
     if( mcp23008GetPortState( currentState ) != SWM_RESULT_SUCCESS )
@@ -276,12 +273,10 @@ SWMI2CExpander::mcp23008Init()
         return SWM_RESULT_FAILURE;
     }
 
-    //currentState = i2c_smbus_read_byte_data( i2cfd, MCP23008_OLAT );
-
     printf( "Initial Value Read: %d\n", currentState );
 
     // Turn all of the pins over to outputs
-    if( mcp23008SetPortMode( 0xFF ) != SWM_RESULT_SUCCESS )
+    if( mcp23008SetPortMode( 0x00 ) != SWM_RESULT_SUCCESS )
     {
         return SWM_RESULT_FAILURE;
     }

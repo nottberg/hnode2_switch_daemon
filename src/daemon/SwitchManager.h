@@ -10,9 +10,6 @@
 #include <libxml/parser.h>
 #include <libxml/tree.h>
 
-//#include "Switch.h"
-//#include "I2CExpander.h"
-
 typedef enum SwitchManagerResultEnum
 {
     SWM_RESULT_SUCCESS,
@@ -60,13 +57,6 @@ class SWMI2CExpander : public SWMDevice
         int i2cfd;
  
         uint32_t nextState;
-
-        //unsigned char  pullup;
-        //unsigned char  direction;
-
-        //unsigned char  currentState;
-
-        //bool i2cActive;
 
         // MCP23008 interface routines
         SWM_RESULT_T mcp23008Init();

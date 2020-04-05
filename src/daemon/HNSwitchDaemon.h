@@ -25,6 +25,9 @@ class ClientRecord
         int getFD();
 };
 
+#define HN_SWDAEMON_DEVICE_NAME  "switch-daemon"
+#define HN_SWDAEMON_DEF_INSTANCE "default"
+
 typedef enum DaemonProcessResultEnum
 {
   DP_RESULT_SUCCESS,
@@ -41,6 +44,8 @@ class HNSwitchDaemon : public Poco::Util::ServerApplication, public SwitchManage
         int epollFD;
         int signalFD; 
         int acceptFD;
+
+        std::string instanceName;
        
         struct epoll_event event;
         struct epoll_event *events;
