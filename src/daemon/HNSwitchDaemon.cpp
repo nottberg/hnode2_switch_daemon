@@ -65,6 +65,8 @@ HNSwitchDaemon::main( const std::vector<std::string>& args )
         return Application::EXIT_OK;
     }
 
+    log.info( "Starting hnode2 switch daemon init" );
+
     // Initialize the schedule matrix
     schMat.loadSchedule( HN_SWDAEMON_DEVICE_NAME, instanceName );
 
@@ -93,6 +95,8 @@ HNSwitchDaemon::main( const std::vector<std::string>& args )
 
     // Open Unix named socket for requests
     openListenerSocket( HN_SWDAEMON_DEVICE_NAME, instanceName );
+
+    log.info( "Entering hnode2 switch daemon event loop" );
 
     // The event loop 
     quit = false;
@@ -247,8 +251,10 @@ HNSwitchDaemon::main( const std::vector<std::string>& args )
         }
     }
 
-    // Shutdown the switch manager
-    //switchMgr.stop();
+    // Close the devices
+    switchMgr.closeDevices();
+
+    log.info( "Hnode2 switch daemon shutdown" );
 
     return Application::EXIT_OK;
 }

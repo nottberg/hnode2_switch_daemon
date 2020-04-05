@@ -9,6 +9,7 @@
 #include "Poco/Util/ServerApplication.h"
 #include "Poco/Util/OptionSet.h"
 
+#include "HNDaemonLog.h"
 #include "HNSwitchManager.h"
 #include "HNScheduleMatrix.h"
 
@@ -37,6 +38,8 @@ typedef enum HNSwitchDaemonResultEnum
 class HNSwitchDaemon : public Poco::Util::ServerApplication, public SwitchManagerNotifications
 {
     private:
+        HNDaemonLog log;
+
         bool helpRequested=false;
 
         bool quit;
