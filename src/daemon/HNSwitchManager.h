@@ -7,8 +7,6 @@
 #include <map>
 
 #include <stdio.h>
-#include <libxml/parser.h>
-#include <libxml/tree.h>
 
 typedef enum HNSwitchManagerResultEnum
 {
