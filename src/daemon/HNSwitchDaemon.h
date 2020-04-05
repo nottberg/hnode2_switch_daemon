@@ -28,11 +28,11 @@ class ClientRecord
 #define HN_SWDAEMON_DEVICE_NAME  "switch-daemon"
 #define HN_SWDAEMON_DEF_INSTANCE "default"
 
-typedef enum DaemonProcessResultEnum
+typedef enum HNSwitchDaemonResultEnum
 {
-  DP_RESULT_SUCCESS,
-  DP_RESULT_FAILURE
-}DP_RESULT_T;
+  HNSD_RESULT_SUCCESS,
+  HNSD_RESULT_FAILURE
+}HNSD_RESULT_T;
 
 class HNSwitchDaemon : public Poco::Util::ServerApplication, public SwitchManagerNotifications
 {
@@ -62,12 +62,12 @@ class HNSwitchDaemon : public Poco::Util::ServerApplication, public SwitchManage
 
         HNScheduleMatrix schMat;
 
-        DP_RESULT_T addSocketToEPoll( int sfd );
-        DP_RESULT_T removeSocketFromEPoll( int sfd );        
+        HNSD_RESULT_T addSocketToEPoll( int sfd );
+        HNSD_RESULT_T removeSocketFromEPoll( int sfd );        
       
-        DP_RESULT_T processNewClientConnections();
-        DP_RESULT_T processClientRequest( int efd );
-        DP_RESULT_T closeClientConnection( int cfd );
+        HNSD_RESULT_T processNewClientConnections();
+        HNSD_RESULT_T processClientRequest( int efd );
+        HNSD_RESULT_T closeClientConnection( int cfd );
 
         void sendStatusPacket( struct timeval *curTS );
 
@@ -78,13 +78,13 @@ class HNSwitchDaemon : public Poco::Util::ServerApplication, public SwitchManage
         void handleOption( const std::string& name, const std::string& value );
         int main( const std::vector<std::string>& args );
 
-        //DP_RESULT_T init();
+        //HNSD_RESULT_T init();
 
-        DP_RESULT_T addSignalSocket( int sfd );
+        HNSD_RESULT_T addSignalSocket( int sfd );
 
-        DP_RESULT_T openListenerSocket();
+        HNSD_RESULT_T openListenerSocket( std::string deviceName, std::string instanceName );
 
-        //DP_RESULT_T run();
+        //HNSD_RESULT_T run();
 
         //virtual void notifyNewMeasurement( uint32_t sensorIndex, HNodeSensorMeasurement &reading );
         virtual void signalError( std::string errMsg );

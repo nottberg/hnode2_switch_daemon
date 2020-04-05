@@ -65,6 +65,7 @@ HNSwitchDaemon::main( const std::vector<std::string>& args )
         return Application::EXIT_OK;
     }
 
+    // Initialize the schedule matrix
     schMat.loadSchedule( HN_SWDAEMON_DEVICE_NAME, instanceName );
 
     // Initialize/Startup the switch manager
@@ -81,7 +82,7 @@ HNSwitchDaemon::main( const std::vector<std::string>& args )
     if( epollFD == -1 )
     {
         syslog( LOG_ERR, "epoll_create: %s", strerror(errno) );
-        return DP_RESULT_FAILURE;
+        return HNSD_RESULT_FAILURE;
     }
 
     // Buffer where events are returned 
@@ -91,7 +92,7 @@ HNSwitchDaemon::main( const std::vector<std::string>& args )
     gettimeofday( &lastReadingTS, NULL );
 
     // Open Unix named socket for requests
-    openListenerSocket();
+    openListenerSocket( HN_SWDAEMON_DEVICE_NAME, instanceName );
 
     // The event loop 
     quit = false;
@@ -254,7 +255,7 @@ HNSwitchDaemon::main( const std::vector<std::string>& args )
 
 
 
-DP_RESULT_T
+HNSD_RESULT_T
 HNSwitchDaemon::addSocketToEPoll( int sfd )
 {
     int flags, s;
@@ -263,7 +264,7 @@ HNSwitchDaemon::addSocketToEPoll( int sfd )
     if( flags == -1 )
     {
         syslog( LOG_ERR, "Failed to get socket flags: %s", strerror(errno) );
-        return DP_RESULT_FAILURE;
+        return HNSD_RESULT_FAILURE;
     }
 
     flags |= O_NONBLOCK;
@@ -271,7 +272,7 @@ HNSwitchDaemon::addSocketToEPoll( int sfd )
     if( s == -1 )
     {
         syslog( LOG_ERR, "Failed to set socket flags: %s", strerror(errno) );
-        return DP_RESULT_FAILURE; 
+        return HNSD_RESULT_FAILURE; 
     }
 
     event.data.fd = sfd;
@@ -279,13 +280,13 @@ HNSwitchDaemon::addSocketToEPoll( int sfd )
     s = epoll_ctl( epollFD, EPOLL_CTL_ADD, sfd, &event );
     if( s == -1 )
     {
-        return DP_RESULT_FAILURE;
+        return HNSD_RESULT_FAILURE;
     }
 
-    return DP_RESULT_SUCCESS;
+    return HNSD_RESULT_SUCCESS;
 }
 
-DP_RESULT_T
+HNSD_RESULT_T
 HNSwitchDaemon::removeSocketFromEPoll( int sfd )
 {
     int s;
@@ -293,14 +294,14 @@ HNSwitchDaemon::removeSocketFromEPoll( int sfd )
     s = epoll_ctl( epollFD, EPOLL_CTL_DEL, sfd, NULL );
     if( s == -1 )
     {
-        return DP_RESULT_FAILURE;
+        return HNSD_RESULT_FAILURE;
     }
 
-    return DP_RESULT_SUCCESS;
+    return HNSD_RESULT_SUCCESS;
 }
 
 /*
-DP_RESULT_T
+HNSD_RESULT_T
 HNSwitchDaemon::init()
 {
     // Default to health ok
@@ -310,7 +311,7 @@ HNSwitchDaemon::init()
     if( epollFD == -1 )
     {
         syslog( LOG_ERR, "epoll_create: %s", strerror(errno) );
-        return DP_RESULT_FAILURE;
+        return HNSD_RESULT_FAILURE;
     }
 
     // Buffer where events are returned 
@@ -323,11 +324,11 @@ HNSwitchDaemon::init()
     // Start reading time now.
     gettimeofday( &lastReadingTS, NULL );
 
-    return DP_RESULT_SUCCESS;
+    return HNSD_RESULT_SUCCESS;
 }
 */
 
-DP_RESULT_T
+HNSD_RESULT_T
 HNSwitchDaemon::addSignalSocket( int sfd )
 {
     signalFD = sfd;
@@ -335,45 +336,45 @@ HNSwitchDaemon::addSignalSocket( int sfd )
     return addSocketToEPoll( signalFD );
 }
 
-DP_RESULT_T
-HNSwitchDaemon::openListenerSocket()
+HNSD_RESULT_T
+HNSwitchDaemon::openListenerSocket( std::string deviceName, std::string instanceName )
 {
     struct sockaddr_un addr;
-    const char *str = "hnswitchd";
+    char str[512];
 
-    memset(&addr, 0, sizeof(struct sockaddr_un));  // Clear address structure
-    addr.sun_family = AF_UNIX;                     // UNIX domain address
+    // Clear address structure - UNIX domain addressing
+    // addr.sun_path[0] cleared to 0 by memset() 
+    memset( &addr, 0, sizeof(struct sockaddr_un) );  
+    addr.sun_family = AF_UNIX;                     
 
-    // addr.sun_path[0] has already been set to 0 by memset() 
-
-    // Abstract socket with name @acrt5n1d_readings
-    //str = "acrt5n1d_readings";
+    // Abstract socket with name @<deviceName>-<instanceName>
+    sprintf( str, "%s-%s", deviceName.c_str(), instanceName.c_str() );
     strncpy( &addr.sun_path[1], str, strlen(str) );
 
     acceptFD = socket( AF_UNIX, SOCK_SEQPACKET, 0 );
     if( acceptFD == -1 )
     {
         syslog( LOG_ERR, "Opening daemon listening socket failed (%s).", strerror(errno) );
-        return DP_RESULT_FAILURE;
+        return HNSD_RESULT_FAILURE;
     }
 
     if( bind( acceptFD, (struct sockaddr *) &addr, sizeof( sa_family_t ) + strlen( str ) + 1 ) == -1 )
     {
-        syslog( LOG_ERR, "Failed to bind socket to @acrt5n1d_readings (%s).", strerror(errno) );
-        return DP_RESULT_FAILURE;
+        syslog( LOG_ERR, "Failed to bind socket to @%s (%s).", str, strerror(errno) );
+        return HNSD_RESULT_FAILURE;
     }
 
     if( listen( acceptFD, 4 ) == -1 )
     {
-        syslog( LOG_ERR, "Failed to listen on socket for @acrt5n1d_readings (%s).", strerror(errno) );
-        return DP_RESULT_FAILURE;
+        syslog( LOG_ERR, "Failed to listen on socket for @%s (%s).", str, strerror(errno) );
+        return HNSD_RESULT_FAILURE;
     }
 
     return addSocketToEPoll( acceptFD );
 }
 
 
-DP_RESULT_T
+HNSD_RESULT_T
 HNSwitchDaemon::processNewClientConnections( )
 {
     uint8_t buf[16];
@@ -398,7 +399,7 @@ HNSwitchDaemon::processNewClientConnections( )
             {
                 // Error while accepting
                 syslog( LOG_ERR, "Failed to accept for @acrt5n1d_readings (%s).", strerror(errno) );
-                return DP_RESULT_FAILURE;
+                return HNSD_RESULT_FAILURE;
             }
         }
 
@@ -413,11 +414,11 @@ HNSwitchDaemon::processNewClientConnections( )
         addSocketToEPoll( infd );
     }
 
-    return DP_RESULT_SUCCESS;
+    return HNSD_RESULT_SUCCESS;
 }
 
                     
-DP_RESULT_T
+HNSD_RESULT_T
 HNSwitchDaemon::closeClientConnection( int clientFD )
 {
     clientMap.erase( clientFD );
@@ -428,10 +429,10 @@ HNSwitchDaemon::closeClientConnection( int clientFD )
 
     syslog( LOG_ERR, "Closed client - sfd: %d", clientFD );
 
-    return DP_RESULT_SUCCESS;
+    return HNSD_RESULT_SUCCESS;
 }
 
-DP_RESULT_T
+HNSD_RESULT_T
 HNSwitchDaemon::processClientRequest( int efd )
 {
     // One of the clients has sent us a message.
@@ -478,7 +479,7 @@ HNSwitchDaemon::processClientRequest( int efd )
 }
 
 #if 0
-DP_RESULT_T
+HNSD_RESULT_T
 HNSwitchDaemon::run()
 {
     // Startup the switch manager
