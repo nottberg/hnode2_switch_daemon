@@ -638,7 +638,7 @@ HNSwitchDaemon::sendStatusPacket( struct timeval *curTS )
 
     for( index = 0; index < swCount; index++ )
     {
-        SWMSwitch *swObj = switchMgr.getSwitchByIndex( index );
+        HNSWSwitch *swObj = switchMgr.getSwitchByIndex( index );
 
         //syslog( LOG_INFO, "Switch %d - address: %s\n", index, swObj->getAddress().c_str() );
         //syslog( LOG_INFO, "Switch %d - id: %s\n", index, swObj->getID().c_str() );

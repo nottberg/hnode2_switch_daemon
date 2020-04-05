@@ -7,11 +7,7 @@ SET( HNSWITCHD_SRC
      ${CMAKE_SOURCE_DIR}/src/daemon/hnswitchd.cpp
      ${CMAKE_SOURCE_DIR}/src/daemon/HNSwitchDaemon.cpp
      ${CMAKE_SOURCE_DIR}/src/daemon/HNScheduleMatrix.cpp
-#     ${CMAKE_SOURCE_DIR}/src/daemon/Switch.cpp
-#     ${CMAKE_SOURCE_DIR}/src/daemon/SwitchDevice.cpp
-     ${CMAKE_SOURCE_DIR}/src/daemon/SwitchManager.cpp
-#     ${CMAKE_SOURCE_DIR}/src/daemon/I2CExpander.cpp
-#     ${CMAKE_SOURCE_DIR}/src/daemon/MCP23008Expander.cpp
+     ${CMAKE_SOURCE_DIR}/src/daemon/HNSwitchManager.cpp
      ${CMAKE_SOURCE_DIR}/src/daemon/HNodeSWDPacket.cpp
 )
 
