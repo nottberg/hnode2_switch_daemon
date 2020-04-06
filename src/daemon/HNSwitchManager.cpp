@@ -183,6 +183,7 @@ HNSWI2CExpander::applyNextState()
         // then write the nextState value
         if( nextState != curState )
         {
+            log.debug( "Applying new state to i2c exp %d:0x%x - %d", devnum, busaddr, nextState );
             return mcp23008SetPortState( nextState );
         }
 
@@ -284,7 +285,7 @@ HNSWI2CExpander::mcp23008Init()
         return HNSW_RESULT_FAILURE;
     }
 
-    log.info( "Initialization complete - model: %s  busaddr:  0x%x  devpath: %s", getModel().c_str(), busaddr, devfn );
+    log.info( "Control device initialized - model: %s  busaddr:  0x%x  devpath: %s", getModel().c_str(), busaddr, devfn );
 
     return HNSW_RESULT_SUCCESS;
 }
@@ -296,6 +297,7 @@ HNSWI2CExpander::mcp23008Close()
     {
         close( i2cfd );
         i2cfd = 0;
+        log.info( "Control device close complete - model: %s  busaddr:  0x%x devnum: %d", getModel().c_str(), busaddr, devnum );
     }
 
     return HNSW_RESULT_SUCCESS;
@@ -354,7 +356,10 @@ HNSWI2CExpander::mcp23008SetPortMode( uint value )
     result = i2c_smbus_write_byte_data( i2cfd, MCP23008_IODIR, value );
 
     if( result < 0 )
+    {
+        log.debug( "Failure control device port mode update - busaddr: 0x%x, errno: %d", busaddr, abs(result) );
         return HNSW_RESULT_FAILURE;
+    }
 
     return HNSW_RESULT_SUCCESS;
 }
@@ -367,7 +372,10 @@ HNSWI2CExpander::mcp23008SetPortPullup( uint value )
     result = i2c_smbus_write_byte_data( i2cfd, MCP23008_GPPU, value );
 
     if( result < 0 )
+    {
+        log.debug( "Failure control device port pullup update - busaddr: 0x%x, errno: %d", busaddr, abs(result) );
         return HNSW_RESULT_FAILURE;
+    }
 
     return HNSW_RESULT_SUCCESS;
 }
@@ -380,7 +388,10 @@ HNSWI2CExpander::mcp23008SetPortState( uint value )
     result = i2c_smbus_write_byte_data( i2cfd, MCP23008_OLAT, value );
 
     if( result < 0 )
+    {
+        log.debug( "Failure control device state update - busaddr: 0x%x, errno: %d", busaddr, abs(result) );
         return HNSW_RESULT_FAILURE;
+    }
 
     return HNSW_RESULT_SUCCESS;
 }
@@ -804,7 +815,13 @@ HNSwitchManager::processOnState( std::vector< std::string > &swidOnList )
 
     // Apply any generated state changes
     for( std::map< std::string, HNSWDevice* >::iterator it = deviceMap.begin(); it != deviceMap.end(); it++ )
-        it->second->applyNextState();
+    {
+        HNSW_RESULT_T result = it->second->applyNextState();
+        if( result != HNSW_RESULT_SUCCESS )
+        {
+            log.error( "ERROR: Unable to update the control device state for device: %s", it->second->getID().c_str() );
+        }
+    }
 
     return HNSW_RESULT_SUCCESS;
 }

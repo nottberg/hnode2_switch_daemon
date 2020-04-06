@@ -75,6 +75,8 @@ class HNSwitchDaemon : public Poco::Util::ServerApplication, public HNSwitchMana
 
         void sendStatusPacket( struct timeval *curTS );
 
+        uint32_t logSwitchChanges( struct tm *time, std::vector< std::string > &onList, uint32_t lastCRC );
+
         void displayHelp();
 
     protected:

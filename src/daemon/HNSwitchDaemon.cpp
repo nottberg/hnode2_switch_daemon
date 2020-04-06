@@ -15,6 +15,7 @@
 #include "Poco/Util/Option.h"
 #include "Poco/Util/OptionSet.h"
 #include "Poco/Util/HelpFormatter.h"
+#include "Poco/Checksum.h"
 
 #include "HNodeSWDPacket.h"
 #include "HNSwitchDaemon.h"
@@ -32,7 +33,7 @@ HNSwitchDaemon::defineOptions( OptionSet& options )
               Option("help", "h", "display help").required(false).repeatable(false));
 
     options.addOption(
-            Option("debug","d", "Enable debug logging").required(false).repeatable(false));
+              Option("debug","d", "Enable debug logging").required(false).repeatable(false));
 }
 
 void 
@@ -53,9 +54,43 @@ HNSwitchDaemon::displayHelp()
     helpFormatter.format(std::cout);
 }
 
+uint32_t
+HNSwitchDaemon::logSwitchChanges( struct tm *time, std::vector< std::string > &onList, uint32_t lastCRC )
+{
+    char buf[50];
+    Poco::Checksum csum;
+
+    // Get an ascii representation of the time
+    // and clip off the newline
+    asctime_r( time, buf );
+    std::string tstr( buf, strlen(buf)-1 );
+
+    // Create a string of all the switch ids
+    std::string swIDStr;
+    for( std::vector< std::string >::iterator it = onList.begin(); it != onList.end(); it++ )
+        swIDStr += " " + *it;
+
+    // Always log at the debug level.
+
+    // Selectively log at the info level, always log at the debug level
+    csum.update( swIDStr );
+    if( lastCRC != csum.checksum() )
+    {
+        log.info( "Time: %s - switch on: %s", tstr.c_str(), swIDStr.c_str() );
+    }
+    else
+    {
+        log.debug( "Time: %s - switch on: %s", tstr.c_str(), swIDStr.c_str() );
+    }
+
+    return csum.checksum();   
+}
+
 int 
 HNSwitchDaemon::main( const std::vector<std::string>& args )
 {
+    uint32_t lastCRC = 0xFFFF;
+
     // Move me to before option processing.
     instanceName = HN_SWDAEMON_DEF_INSTANCE;
 
@@ -93,8 +128,8 @@ HNSwitchDaemon::main( const std::vector<std::string>& args )
     epollFD = epoll_create1( 0 );
     if( epollFD == -1 )
     {
-        syslog( LOG_ERR, "epoll_create: %s", strerror(errno) );
-        return HNSD_RESULT_FAILURE;
+        log.error( "ERROR: Failure to create epoll event loop: %s", strerror(errno) );
+        return Application::EXIT_SOFTWARE;
     }
 
     // Buffer where events are returned 
@@ -112,7 +147,10 @@ HNSwitchDaemon::main( const std::vector<std::string>& args )
     quit = false;
     while( quit == false )
     {
-        int n, i;
+        int n;
+        int i;
+        struct tm newtime;
+        time_t ltime;
 
         // Check for events
         n = epoll_wait( epollFD, events, MAXEVENTS, 2000 );
@@ -125,32 +163,29 @@ HNSwitchDaemon::main( const std::vector<std::string>& args )
                 continue;
 
             // Handle error
-            std::cout << "EPoll Error" << std::endl;
+            log.error( "ERROR: Failure report by epoll event loop: %s", strerror( errno ) );
+            return Application::EXIT_SOFTWARE;
         }
 
-        // Timeout
-        if( n == 0 )
-        {
-            struct tm newtime;
-            time_t ltime;
-            char buf[50];
+        // Check these critical tasks everytime
+        // the event loop wakes up.
  
-            ltime=time( &ltime );
-            localtime_r( &ltime, &newtime );
-            asctime_r( &newtime, buf );
-            std::string tstr( buf, strlen(buf)-1 );
+        // Get the local time so schedule matrix 
+        // can be queried
+        ltime = time( &ltime );
+        localtime_r( &ltime, &newtime );
 
-            std::vector< std::string > swidOnList;
-            schMat.getSwitchOnList( &newtime, swidOnList );
+        // Query the schedule matrix for the list of
+        // switches that should be active currently.
+        std::vector< std::string > swidOnList;
+        schMat.getSwitchOnList( &newtime, swidOnList );
 
-            std::cout << "Time: " << tstr << "  swids: "; 
-            for( std::vector< std::string >::iterator it = swidOnList.begin(); it != swidOnList.end(); it++ )
-            {
-                std::cout << *it << " ";
-            }
-            std::cout << std::endl;
+        // Do some logging
+        lastCRC = logSwitchChanges( &newtime, swidOnList, lastCRC );
 
-            switchMgr.processOnState( swidOnList );
+        // Run the list of ON switches through the switch manager 
+        // to make any necessary control device changes.
+        switchMgr.processOnState( swidOnList );
  
 /* 
             struct timeval curTS;
@@ -173,63 +208,16 @@ HNSwitchDaemon::main( const std::vector<std::string>& args )
                 sendStatus = false;
             }
 
-            // Run the RTLSDR loop
-            if( switchMgr.evaluateActions() )
-            {
-	            syslog( LOG_ERR, "Fatal error while evaluating switch actions, exiting...\n" );
-	            break;
-            }
-            continue;
 */
-        }
+
+        // If it was a timeout then continue to next loop
+        // skip socket related checks.
+        if( n == 0 )
+            continue;
 
         // Socket event
         for( i = 0; i < n; i++ )
 	    {
-#if 0
-            // Dispatch based on file desriptor
-            if( signalFD == events[i].data.fd )
-            {
-                // There was signal activity from libdaemon
-	            if( (events[i].events & EPOLLERR) || (events[i].events & EPOLLHUP) || (!(events[i].events & EPOLLIN)) )
-	            {
-                    // An error has occured on this fd, or the socket is not ready for reading (why were we notified then?) 
-	                syslog( LOG_ERR, "epoll error on daemon signal socket\n" );
-	                close (events[i].data.fd);
-	                continue;
-	            }
-
-                // Read the signal from the socket
-                int sig = daemon_signal_next();
-                if( sig <= 0 ) 
-                {
-                    syslog(LOG_ERR, "daemon_signal_next() failed: %s", strerror(errno));
-                    break;
-                }
-
-                // Act on the signal
-                switch (sig)
-                {
-
-                    case SIGINT:
-                    case SIGQUIT:
-                    case SIGTERM:
-                    {
-                        syslog( LOG_WARNING, "Got SIGINT, SIGQUIT or SIGTERM." );
-                        quit = true;
-                    }
-                    break;
-
-                    case SIGHUP:
-                    default:
-                    {
-                        syslog( LOG_INFO, "HUP - Ignoring signal" );
-                        break;
-                    }
-                }
-            }
-            else 
-#endif
             if( acceptFD == events[i].data.fd )
 	        {
                 // New client connections
