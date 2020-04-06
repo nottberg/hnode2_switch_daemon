@@ -7,6 +7,8 @@
 #include <string>
 #include <list>
 
+#include "HNDaemonLog.h"
+
 typedef enum HNSScheduleMatrixResult
 {
     HNSM_RESULT_SUCCESS,
@@ -74,7 +76,7 @@ class HNSAction
 
         static bool sortCompare(const HNSAction& first, const HNSAction& second);
 
-        void debugPrint( uint offset );
+        void debugPrint( uint offset, HNDaemonLogSrc &log );
 };
 
 class HNSDay
@@ -97,7 +99,7 @@ class HNSDay
 
         void sortActions();
 
-        void debugPrint( uint offset );
+        void debugPrint( uint offset, HNDaemonLogSrc &log );
 
         HNSM_RESULT_T getSwitchOnList( HNS24HTime &tgtTime, std::vector< std::string > &swidList );
 };
@@ -107,6 +109,8 @@ class HNSDay
 class HNScheduleMatrix
 {
     private:
+        HNDaemonLogSrc log;
+
         std::string rootDirPath;
 
         std::string deviceName;
@@ -121,6 +125,8 @@ class HNScheduleMatrix
     public:
         HNScheduleMatrix();
        ~HNScheduleMatrix();
+
+        void setDstLog( HNDaemonLog *logPtr );
 
         void setRootDirectory( std::string path );
         std::string getRootDirectory();

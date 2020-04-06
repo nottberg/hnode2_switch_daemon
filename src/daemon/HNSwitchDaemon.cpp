@@ -15,6 +15,7 @@
 #include "Poco/Util/Option.h"
 #include "Poco/Util/OptionSet.h"
 #include "Poco/Util/HelpFormatter.h"
+#include "Poco/Checksum.h"
 
 #include "HNodeSWDPacket.h"
 #include "HNSwitchDaemon.h"
@@ -32,15 +33,15 @@ HNSwitchDaemon::defineOptions( OptionSet& options )
               Option("help", "h", "display help").required(false).repeatable(false));
 
     options.addOption(
-            Option("port","p", "Listening port (default 9980)").required(false).repeatable(true).argument("<port>"));
+              Option("debug","d", "Enable debug logging").required(false).repeatable(false));
 }
 
 void 
 HNSwitchDaemon::handleOption( const std::string& name, const std::string& value )
 {
-    ServerApplication::handleOption(name,value);
-    if(name=="help") helpRequested=true;
-    //if(name=="port") listenPort=stoi(value);
+    ServerApplication::handleOption( name, value );
+    if(name=="help") _helpRequested = true;
+    if(name=="debug") _debugLogging = true;
 }
 
 void 
@@ -49,22 +50,69 @@ HNSwitchDaemon::displayHelp()
     HelpFormatter helpFormatter(options());
     helpFormatter.setCommand(commandName());
     helpFormatter.setUsage("[options]");
-    helpFormatter.setHeader("C++ server pages application server.");
+    helpFormatter.setHeader("HNode2 Switch Daemon.");
     helpFormatter.format(std::cout);
+}
+
+uint32_t
+HNSwitchDaemon::logSwitchChanges( struct tm *time, std::vector< std::string > &onList, uint32_t lastCRC )
+{
+    char buf[50];
+    Poco::Checksum csum;
+
+    // Get an ascii representation of the time
+    // and clip off the newline
+    asctime_r( time, buf );
+    std::string tstr( buf, strlen(buf)-1 );
+
+    // Create a string of all the switch ids
+    std::string swIDStr;
+    for( std::vector< std::string >::iterator it = onList.begin(); it != onList.end(); it++ )
+        swIDStr += " " + *it;
+
+    // Always log at the debug level.
+
+    // Selectively log at the info level, always log at the debug level
+    csum.update( swIDStr );
+    if( lastCRC != csum.checksum() )
+    {
+        log.info( "Time: %s - switch on: %s", tstr.c_str(), swIDStr.c_str() );
+    }
+    else
+    {
+        log.debug( "Time: %s - switch on: %s", tstr.c_str(), swIDStr.c_str() );
+    }
+
+    return csum.checksum();   
 }
 
 int 
 HNSwitchDaemon::main( const std::vector<std::string>& args )
 {
+    uint32_t lastCRC = 0xFFFF;
+
     // Move me to before option processing.
     instanceName = HN_SWDAEMON_DEF_INSTANCE;
 
-    if(helpRequested)
+    // Enable debug logging if requested
+    if( _debugLogging == true )
+    {
+       log.setLevelLimit( HNDL_LOG_LEVEL_ALL );
+    }
+
+    // Setup logging for sub objects
+    schMat.setDstLog( &log );
+    switchMgr.setDstLog( &log );
+
+    if( _helpRequested )
     {
         displayHelp();
         return Application::EXIT_OK;
     }
 
+    log.info( "Starting hnode2 switch daemon init" );
+
+    // Initialize the schedule matrix
     schMat.loadSchedule( HN_SWDAEMON_DEVICE_NAME, instanceName );
 
     // Initialize/Startup the switch manager
@@ -80,8 +128,8 @@ HNSwitchDaemon::main( const std::vector<std::string>& args )
     epollFD = epoll_create1( 0 );
     if( epollFD == -1 )
     {
-        syslog( LOG_ERR, "epoll_create: %s", strerror(errno) );
-        return DP_RESULT_FAILURE;
+        log.error( "ERROR: Failure to create epoll event loop: %s", strerror(errno) );
+        return Application::EXIT_SOFTWARE;
     }
 
     // Buffer where events are returned 
@@ -91,13 +139,18 @@ HNSwitchDaemon::main( const std::vector<std::string>& args )
     gettimeofday( &lastReadingTS, NULL );
 
     // Open Unix named socket for requests
-    openListenerSocket();
+    openListenerSocket( HN_SWDAEMON_DEVICE_NAME, instanceName );
+
+    log.info( "Entering hnode2 switch daemon event loop" );
 
     // The event loop 
     quit = false;
     while( quit == false )
     {
-        int n, i;
+        int n;
+        int i;
+        struct tm newtime;
+        time_t ltime;
 
         // Check for events
         n = epoll_wait( epollFD, events, MAXEVENTS, 2000 );
@@ -110,32 +163,29 @@ HNSwitchDaemon::main( const std::vector<std::string>& args )
                 continue;
 
             // Handle error
-            std::cout << "EPoll Error" << std::endl;
+            log.error( "ERROR: Failure report by epoll event loop: %s", strerror( errno ) );
+            return Application::EXIT_SOFTWARE;
         }
 
-        // Timeout
-        if( n == 0 )
-        {
-            struct tm newtime;
-            time_t ltime;
-            char buf[50];
+        // Check these critical tasks everytime
+        // the event loop wakes up.
  
-            ltime=time( &ltime );
-            localtime_r( &ltime, &newtime );
-            asctime_r( &newtime, buf );
-            std::string tstr( buf, strlen(buf)-1 );
+        // Get the local time so schedule matrix 
+        // can be queried
+        ltime = time( &ltime );
+        localtime_r( &ltime, &newtime );
 
-            std::vector< std::string > swidOnList;
-            schMat.getSwitchOnList( &newtime, swidOnList );
+        // Query the schedule matrix for the list of
+        // switches that should be active currently.
+        std::vector< std::string > swidOnList;
+        schMat.getSwitchOnList( &newtime, swidOnList );
 
-            std::cout << "Time: " << tstr << "  swids: "; 
-            for( std::vector< std::string >::iterator it = swidOnList.begin(); it != swidOnList.end(); it++ )
-            {
-                std::cout << *it << " ";
-            }
-            std::cout << std::endl;
+        // Do some logging
+        lastCRC = logSwitchChanges( &newtime, swidOnList, lastCRC );
 
-            switchMgr.processOnState( swidOnList );
+        // Run the list of ON switches through the switch manager 
+        // to make any necessary control device changes.
+        switchMgr.processOnState( swidOnList );
  
 /* 
             struct timeval curTS;
@@ -158,63 +208,16 @@ HNSwitchDaemon::main( const std::vector<std::string>& args )
                 sendStatus = false;
             }
 
-            // Run the RTLSDR loop
-            if( switchMgr.evaluateActions() )
-            {
-	            syslog( LOG_ERR, "Fatal error while evaluating switch actions, exiting...\n" );
-	            break;
-            }
-            continue;
 */
-        }
+
+        // If it was a timeout then continue to next loop
+        // skip socket related checks.
+        if( n == 0 )
+            continue;
 
         // Socket event
         for( i = 0; i < n; i++ )
 	    {
-#if 0
-            // Dispatch based on file desriptor
-            if( signalFD == events[i].data.fd )
-            {
-                // There was signal activity from libdaemon
-	            if( (events[i].events & EPOLLERR) || (events[i].events & EPOLLHUP) || (!(events[i].events & EPOLLIN)) )
-	            {
-                    // An error has occured on this fd, or the socket is not ready for reading (why were we notified then?) 
-	                syslog( LOG_ERR, "epoll error on daemon signal socket\n" );
-	                close (events[i].data.fd);
-	                continue;
-	            }
-
-                // Read the signal from the socket
-                int sig = daemon_signal_next();
-                if( sig <= 0 ) 
-                {
-                    syslog(LOG_ERR, "daemon_signal_next() failed: %s", strerror(errno));
-                    break;
-                }
-
-                // Act on the signal
-                switch (sig)
-                {
-
-                    case SIGINT:
-                    case SIGQUIT:
-                    case SIGTERM:
-                    {
-                        syslog( LOG_WARNING, "Got SIGINT, SIGQUIT or SIGTERM." );
-                        quit = true;
-                    }
-                    break;
-
-                    case SIGHUP:
-                    default:
-                    {
-                        syslog( LOG_INFO, "HUP - Ignoring signal" );
-                        break;
-                    }
-                }
-            }
-            else 
-#endif
             if( acceptFD == events[i].data.fd )
 	        {
                 // New client connections
@@ -246,15 +249,17 @@ HNSwitchDaemon::main( const std::vector<std::string>& args )
         }
     }
 
-    // Shutdown the switch manager
-    //switchMgr.stop();
+    // Close the devices
+    switchMgr.closeDevices();
+
+    log.info( "Hnode2 switch daemon shutdown" );
 
     return Application::EXIT_OK;
 }
 
 
 
-DP_RESULT_T
+HNSD_RESULT_T
 HNSwitchDaemon::addSocketToEPoll( int sfd )
 {
     int flags, s;
@@ -263,7 +268,7 @@ HNSwitchDaemon::addSocketToEPoll( int sfd )
     if( flags == -1 )
     {
         syslog( LOG_ERR, "Failed to get socket flags: %s", strerror(errno) );
-        return DP_RESULT_FAILURE;
+        return HNSD_RESULT_FAILURE;
     }
 
     flags |= O_NONBLOCK;
@@ -271,7 +276,7 @@ HNSwitchDaemon::addSocketToEPoll( int sfd )
     if( s == -1 )
     {
         syslog( LOG_ERR, "Failed to set socket flags: %s", strerror(errno) );
-        return DP_RESULT_FAILURE; 
+        return HNSD_RESULT_FAILURE; 
     }
 
     event.data.fd = sfd;
@@ -279,13 +284,13 @@ HNSwitchDaemon::addSocketToEPoll( int sfd )
     s = epoll_ctl( epollFD, EPOLL_CTL_ADD, sfd, &event );
     if( s == -1 )
     {
-        return DP_RESULT_FAILURE;
+        return HNSD_RESULT_FAILURE;
     }
 
-    return DP_RESULT_SUCCESS;
+    return HNSD_RESULT_SUCCESS;
 }
 
-DP_RESULT_T
+HNSD_RESULT_T
 HNSwitchDaemon::removeSocketFromEPoll( int sfd )
 {
     int s;
@@ -293,14 +298,14 @@ HNSwitchDaemon::removeSocketFromEPoll( int sfd )
     s = epoll_ctl( epollFD, EPOLL_CTL_DEL, sfd, NULL );
     if( s == -1 )
     {
-        return DP_RESULT_FAILURE;
+        return HNSD_RESULT_FAILURE;
     }
 
-    return DP_RESULT_SUCCESS;
+    return HNSD_RESULT_SUCCESS;
 }
 
 /*
-DP_RESULT_T
+HNSD_RESULT_T
 HNSwitchDaemon::init()
 {
     // Default to health ok
@@ -310,7 +315,7 @@ HNSwitchDaemon::init()
     if( epollFD == -1 )
     {
         syslog( LOG_ERR, "epoll_create: %s", strerror(errno) );
-        return DP_RESULT_FAILURE;
+        return HNSD_RESULT_FAILURE;
     }
 
     // Buffer where events are returned 
@@ -323,11 +328,11 @@ HNSwitchDaemon::init()
     // Start reading time now.
     gettimeofday( &lastReadingTS, NULL );
 
-    return DP_RESULT_SUCCESS;
+    return HNSD_RESULT_SUCCESS;
 }
 */
 
-DP_RESULT_T
+HNSD_RESULT_T
 HNSwitchDaemon::addSignalSocket( int sfd )
 {
     signalFD = sfd;
@@ -335,45 +340,45 @@ HNSwitchDaemon::addSignalSocket( int sfd )
     return addSocketToEPoll( signalFD );
 }
 
-DP_RESULT_T
-HNSwitchDaemon::openListenerSocket()
+HNSD_RESULT_T
+HNSwitchDaemon::openListenerSocket( std::string deviceName, std::string instanceName )
 {
     struct sockaddr_un addr;
-    const char *str = "hnswitchd";
+    char str[512];
 
-    memset(&addr, 0, sizeof(struct sockaddr_un));  // Clear address structure
-    addr.sun_family = AF_UNIX;                     // UNIX domain address
+    // Clear address structure - UNIX domain addressing
+    // addr.sun_path[0] cleared to 0 by memset() 
+    memset( &addr, 0, sizeof(struct sockaddr_un) );  
+    addr.sun_family = AF_UNIX;                     
 
-    // addr.sun_path[0] has already been set to 0 by memset() 
-
-    // Abstract socket with name @acrt5n1d_readings
-    //str = "acrt5n1d_readings";
+    // Abstract socket with name @<deviceName>-<instanceName>
+    sprintf( str, "hnode2-%s-%s", deviceName.c_str(), instanceName.c_str() );
     strncpy( &addr.sun_path[1], str, strlen(str) );
 
     acceptFD = socket( AF_UNIX, SOCK_SEQPACKET, 0 );
     if( acceptFD == -1 )
     {
         syslog( LOG_ERR, "Opening daemon listening socket failed (%s).", strerror(errno) );
-        return DP_RESULT_FAILURE;
+        return HNSD_RESULT_FAILURE;
     }
 
     if( bind( acceptFD, (struct sockaddr *) &addr, sizeof( sa_family_t ) + strlen( str ) + 1 ) == -1 )
     {
-        syslog( LOG_ERR, "Failed to bind socket to @acrt5n1d_readings (%s).", strerror(errno) );
-        return DP_RESULT_FAILURE;
+        syslog( LOG_ERR, "Failed to bind socket to @%s (%s).", str, strerror(errno) );
+        return HNSD_RESULT_FAILURE;
     }
 
     if( listen( acceptFD, 4 ) == -1 )
     {
-        syslog( LOG_ERR, "Failed to listen on socket for @acrt5n1d_readings (%s).", strerror(errno) );
-        return DP_RESULT_FAILURE;
+        syslog( LOG_ERR, "Failed to listen on socket for @%s (%s).", str, strerror(errno) );
+        return HNSD_RESULT_FAILURE;
     }
 
     return addSocketToEPoll( acceptFD );
 }
 
 
-DP_RESULT_T
+HNSD_RESULT_T
 HNSwitchDaemon::processNewClientConnections( )
 {
     uint8_t buf[16];
@@ -398,7 +403,7 @@ HNSwitchDaemon::processNewClientConnections( )
             {
                 // Error while accepting
                 syslog( LOG_ERR, "Failed to accept for @acrt5n1d_readings (%s).", strerror(errno) );
-                return DP_RESULT_FAILURE;
+                return HNSD_RESULT_FAILURE;
             }
         }
 
@@ -413,11 +418,11 @@ HNSwitchDaemon::processNewClientConnections( )
         addSocketToEPoll( infd );
     }
 
-    return DP_RESULT_SUCCESS;
+    return HNSD_RESULT_SUCCESS;
 }
 
                     
-DP_RESULT_T
+HNSD_RESULT_T
 HNSwitchDaemon::closeClientConnection( int clientFD )
 {
     clientMap.erase( clientFD );
@@ -428,10 +433,10 @@ HNSwitchDaemon::closeClientConnection( int clientFD )
 
     syslog( LOG_ERR, "Closed client - sfd: %d", clientFD );
 
-    return DP_RESULT_SUCCESS;
+    return HNSD_RESULT_SUCCESS;
 }
 
-DP_RESULT_T
+HNSD_RESULT_T
 HNSwitchDaemon::processClientRequest( int efd )
 {
     // One of the clients has sent us a message.
@@ -478,7 +483,7 @@ HNSwitchDaemon::processClientRequest( int efd )
 }
 
 #if 0
-DP_RESULT_T
+HNSD_RESULT_T
 HNSwitchDaemon::run()
 {
     // Startup the switch manager
