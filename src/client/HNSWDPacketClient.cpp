@@ -1,7 +1,72 @@
 #include <arpa/inet.h>
 
-#include "HNodeSWDPacket.h"
+#include "HNSWDPacketClient.h"
 
+HNSWDPacketClient::HNSWDPacketClient()
+{
+    pktHdr.type = HNSWD_PTYPE_NOTSET;
+    pktHdr.resultCode = HNSWD_RCODE_NOTSET;
+    pktHdr.msgLen = 0;
+}
+
+HNSWDPacketClient::HNSWDPacketClient( HNSWD_PTYPE_T type, HNSWD_RCODE_T result )
+{
+
+}
+
+HNSWDPacketClient::HNSWDPacketClient( HNSWD_PTYPE_T type, HNSWD_RCODE_T result, std::string msg )
+{
+
+}
+
+HNSWDPacketClient::~HNSWDPacketClient()
+{
+
+}
+
+void 
+HNSWDPacketClient::setType( HNSWD_PTYPE_T value )
+{
+
+}
+
+HNSWD_PTYPE_T 
+HNSWDPacketClient::getType()
+{
+
+}
+
+void 
+HNSWDPacketClient::setResult( HNSWD_RCODE_T value )
+{
+
+}
+
+HNSWD_RCODE_T 
+HNSWDPacketClient::getResult()
+{
+
+}
+
+void 
+HNSWDPacketClient::setMsg( std::string value )
+{
+
+}
+
+std::string&
+HNSWDPacketClient::getMsgRef()
+{
+
+}
+
+
+
+
+
+
+
+#if 0
 HNodeSWDPacket::HNodeSWDPacket()
 {
     packetData.payloadLength = htonl( 0 );
@@ -147,5 +212,5 @@ HNodeSWDPacket::getMaxPacketLength()
     return (sizeof packetData);
 }
 
-
+#endif
 

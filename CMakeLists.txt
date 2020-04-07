@@ -9,12 +9,12 @@ SET( HNSWITCHD_SRC
      ${CMAKE_SOURCE_DIR}/src/daemon/HNDaemonLog.cpp
      ${CMAKE_SOURCE_DIR}/src/daemon/HNScheduleMatrix.cpp
      ${CMAKE_SOURCE_DIR}/src/daemon/HNSwitchManager.cpp
-     ${CMAKE_SOURCE_DIR}/src/daemon/HNodeSWDPacket.cpp
+     ${CMAKE_SOURCE_DIR}/src/daemon/HNSWDPacketDaemon.cpp
 )
 
 SET( HNSWITCHD_CLIENT_SRC
      ${CMAKE_SOURCE_DIR}/src/client/hnswitchd_client.cpp
-     ${CMAKE_SOURCE_DIR}/src/client/HNodeSWDPacket.cpp
+     ${CMAKE_SOURCE_DIR}/src/client/HNSWDPacketClient.cpp
 )
 
 SET(CMAKE_BUILD_TYPE Debug)

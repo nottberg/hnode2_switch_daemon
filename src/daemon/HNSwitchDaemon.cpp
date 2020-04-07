@@ -17,7 +17,7 @@
 #include "Poco/Util/HelpFormatter.h"
 #include "Poco/Checksum.h"
 
-#include "HNodeSWDPacket.h"
+#include "HNSWDPacketDaemon.h"
 #include "HNSwitchDaemon.h"
 
 using namespace Poco::Util;
@@ -440,11 +440,12 @@ HNSD_RESULT_T
 HNSwitchDaemon::processClientRequest( int efd )
 {
     // One of the clients has sent us a message.
-    HNodeSWDPacket  packet;
-    uint32_t        recvd = 0;
+    HNSWDPacketDaemon packet;
+    uint32_t          recvd = 0;
 
     //std::cout << "start recvd..." << std::endl;
 
+#if 0 // FIXME
     recvd += recv( efd, packet.getPacketPtr(), packet.getMaxPacketLength(), 0 );
 
     switch( packet.getType() )
@@ -479,7 +480,7 @@ HNSwitchDaemon::processClientRequest( int efd )
         }
         break;
     }
-
+#endif
 }
 
 #if 0
@@ -622,11 +623,12 @@ HNSwitchDaemon::run()
 void 
 HNSwitchDaemon::sendStatusPacket( struct timeval *curTS )
 {
-    HNodeSWDPacket packet;
+    HNSWDPacketDaemon packet;
     uint32_t length;
     uint32_t swCount;
     uint32_t index;
 
+#if 0
     packet.setType( HNSWP_TYPE_STATUS );
 
     packet.setActionIndex( healthOK );
@@ -669,7 +671,8 @@ HNSwitchDaemon::sendStatusPacket( struct timeval *curTS )
     for( std::map< int, ClientRecord >::iterator it = clientMap.begin(); it != clientMap.end(); it++ )
     {
         length = send( it->first, packet.getPacketPtr(), packet.getPacketLength(), MSG_NOSIGNAL );         
-    }    
+    }
+#endif
 }
 
 #if 0

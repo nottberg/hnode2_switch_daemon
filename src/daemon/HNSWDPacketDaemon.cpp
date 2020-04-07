@@ -1,6 +1,67 @@
 #include <arpa/inet.h>
 
-#include "HNodeSWDPacket.h"
+#include "HNSWDPacketDaemon.h"
+
+HNSWDPacketDaemon::HNSWDPacketDaemon()
+{
+    pktHdr.type = HNSWD_PTYPE_NOTSET;
+    pktHdr.resultCode = HNSWD_RCODE_NOTSET;
+    pktHdr.msgLen = 0;
+}
+
+HNSWDPacketDaemon::HNSWDPacketDaemon( HNSWD_PTYPE_T type, HNSWD_RCODE_T result )
+{
+
+}
+
+HNSWDPacketDaemon::HNSWDPacketDaemon( HNSWD_PTYPE_T type, HNSWD_RCODE_T result, std::string msg )
+{
+
+}
+
+HNSWDPacketDaemon::~HNSWDPacketDaemon()
+{
+
+}
+
+void 
+HNSWDPacketDaemon::setType( HNSWD_PTYPE_T value )
+{
+
+}
+
+HNSWD_PTYPE_T 
+HNSWDPacketDaemon::getType()
+{
+
+}
+
+void 
+HNSWDPacketDaemon::setResult( HNSWD_RCODE_T value )
+{
+
+}
+
+HNSWD_RCODE_T 
+HNSWDPacketDaemon::getResult()
+{
+
+}
+
+void 
+HNSWDPacketDaemon::setMsg( std::string value )
+{
+
+}
+
+std::string&
+HNSWDPacketDaemon::getMsgRef()
+{
+
+}
+
+
+#if 0
 
 HNodeSWDPacket::HNodeSWDPacket()
 {
@@ -147,5 +208,5 @@ HNodeSWDPacket::getMaxPacketLength()
     return (sizeof packetData);
 }
 
-
+#endif
 
