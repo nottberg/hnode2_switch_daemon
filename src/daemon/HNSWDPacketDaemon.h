@@ -7,11 +7,32 @@
 
 #include "HNSWDPacket.h"
 
+typedef enum HNSWDPacketDaemonResultEnum
+{
+    HNSWDP_RESULT_SUCCESS,
+    HNSWDP_RESULT_FAILURE
+}HNSWDP_RESULT_T;
+
+class HNSWDMsgBuffer
+{
+    private:
+        uint8_t  *bufPtr;
+        uint      allocLen;
+
+    public:
+        HNSWDMsgBuffer();
+       ~HNSWDMsgBuffer();
+
+        HNSWDP_RESULT_T ensureBufferExists( uint maxlen );
+
+        uint8_t *buffer();
+};
+
 class HNSWDPacketDaemon
 {
     private:
-        HNSWD_PKTHDR_T pktHdr;
-        std::string    msgData;
+        HNSWD_PKTHDR_T  pktHdr;
+        HNSWDMsgBuffer  msgData;
 
     public:
         HNSWDPacketDaemon();
@@ -26,7 +47,13 @@ class HNSWDPacketDaemon
         HNSWD_RCODE_T getResult();
 
         void setMsg( std::string value );
-        std::string &getMsgRef();
+        uint8_t* getMsg( uint &msgLen );
+        void getMsg( std::string &msgStr );
+
+        HNSWDP_RESULT_T rcvHeader( int sockfd );
+        HNSWDP_RESULT_T rcvPayload( int sockfd );
+        HNSWDP_RESULT_T sendAll( int sockfd );
+
 };
 
 #endif // __HN_SWD_PACKET_DAEMON_H__

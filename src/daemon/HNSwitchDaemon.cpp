@@ -187,6 +187,19 @@ HNSwitchDaemon::main( const std::vector<std::string>& args )
         // to make any necessary control device changes.
         switchMgr.processOnState( swidOnList );
  
+        // Check if a status update should
+        // be sent
+        if( sendStatus )
+        {
+            struct timeval curTS;
+
+            // Get current time
+            gettimeofday( &curTS, NULL );
+
+            sendStatusPacket( &curTS );
+            sendStatus = false;
+        }
+
 /* 
             struct timeval curTS;
 
@@ -200,13 +213,6 @@ HNSwitchDaemon::main( const std::vector<std::string>& args )
                 signalError( "No measurments within last 2 minutes." );
             }
 
-            // Check if a status update should
-            // be sent
-            if( sendStatus )
-            {
-                sendStatusPacket( &curTS );
-                sendStatus = false;
-            }
 
 */
 
@@ -437,29 +443,48 @@ HNSwitchDaemon::closeClientConnection( int clientFD )
 }
 
 HNSD_RESULT_T
-HNSwitchDaemon::processClientRequest( int efd )
+HNSwitchDaemon::processClientRequest( int cfd )
 {
     // One of the clients has sent us a message.
     HNSWDPacketDaemon packet;
+    HNSWDP_RESULT_T   result;
+
     uint32_t          recvd = 0;
 
-    //std::cout << "start recvd..." << std::endl;
+    // Note that a client request is being recieved.
+    log.info( "Receiving client request from fd: %d", cfd );
 
-#if 0 // FIXME
-    recvd += recv( efd, packet.getPacketPtr(), packet.getMaxPacketLength(), 0 );
+    // Read the header portion of the packet
+    result = packet.rcvHeader( cfd );
+    if( result != HNSWDP_RESULT_SUCCESS )
+    {
+        log.error( "ERROR: Failed while receiving packet header." );
+        return HNSD_RESULT_FAILURE;
+    } 
 
+    // Read any payload portion of the packet
+    result = packet.rcvPayload( cfd );
+    if( result != HNSWDP_RESULT_SUCCESS )
+    {
+        log.error( "ERROR: Failed while receiving packet payload." );
+        return HNSD_RESULT_FAILURE;
+    } 
+
+    // Take any necessary action associated with the packet
     switch( packet.getType() )
     {
-        case HNSWP_TYPE_PING:
+        // A request for status from the daemon
+        case HNSWD_PTYPE_STATUS_REQ:
         {
-            syslog( LOG_ERR, "Ping request from client: %d", efd );
+            log.info( "Status request from client: %d", cfd );
             sendStatus = true;
         }
         break;
 
-        case HNSWP_TYPE_RESET:
+        // Request the daemon to reset itself.
+        case HNSWD_PTYPE_RESET_REQ:
         {
-            syslog( LOG_ERR, "Reset request from client: %d", efd );
+            log.info( "Reset request from client: %d", cfd );
 
             // Start out with good health.
             healthOK = true;
@@ -474,13 +499,17 @@ HNSwitchDaemon::processClientRequest( int efd )
         }
         break;
 
+        // Request a manual sequence of switch activity.
+        case HNSWD_PTYPE_OT_SW_SEQ_REQ:
+        break;
+
+        // Unknown packet
         default:
         {
-            syslog( LOG_ERR, "RX of unknown packet - len: %d  type: %d", recvd, packet.getType() );
+            log.warn( "Warning: RX of unsupported packet, discarding - type: %d", packet.getType() );
         }
         break;
     }
-#endif
 }
 
 #if 0
@@ -624,13 +653,19 @@ void
 HNSwitchDaemon::sendStatusPacket( struct timeval *curTS )
 {
     HNSWDPacketDaemon packet;
-    uint32_t length;
-    uint32_t swCount;
-    uint32_t index;
+    //uint32_t length;
+    //uint32_t swCount;
+    //uint32_t index;
 
+    packet.setType( HNSWD_PTYPE_DAEMON_STATUS );
+    packet.setResult( HNSWD_RCODE_SUCCESS );
+    packet.setMsg( "{ \"health\":\"OK\" } " );
+
+    for( std::map< int, ClientRecord >::iterator it = clientMap.begin(); it != clientMap.end(); it++ )
+    {
+        packet.sendAll( it->first );         
+    }
 #if 0
-    packet.setType( HNSWP_TYPE_STATUS );
-
     packet.setActionIndex( healthOK );
 
     packet.setParam( 0, curTS->tv_sec );

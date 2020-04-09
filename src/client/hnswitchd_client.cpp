@@ -129,25 +129,11 @@ class HNSwitchClient: public Application
 
         int main( const ArgVec& args )
         {
-//            struct sockaddr_un addr;
-//            const char *str = "hnswitchd";
             uint sockfd = 0;
 
             // Bailout if help was requested.
             if( _helpRequested == true )
                 return Application::EXIT_OK;
-
-            //logger().information("Command line:");
-
-            // Clear address structure - Unix domain addressing
-            // addr.sun_path[0] will be zeroed due to memset 
-//            memset( &addr, 0, sizeof(struct sockaddr_un) );  
-//            addr.sun_family = AF_UNIX;                     
-
-            // Abstract socket with name @acrt5n1d_readings
-//            strncpy( &addr.sun_path[1], str, strlen(str) );
-
-//            int fd = socket( AF_UNIX, SOCK_SEQPACKET, 0 );
 
             // Establish the connection.
             if( openClientSocket( "switch-daemon", "default", sockfd ) == true )
@@ -166,22 +152,20 @@ class HNSwitchClient: public Application
 
                 std::cout << "Sending a RESET packet...";
 
-                //length = send( sockfd, packet.getPacketPtr(), packet.getPacketLength(), MSG_NOSIGNAL );
+                packet.sendAll( sockfd ); //length = send( sockfd, packet.getPacketPtr(), packet.getPacketLength(), MSG_NOSIGNAL );
 
-                std::cout << length << " bytes sent." << std::endl;
             }
             else if( _pingRequested == true )
             {
                 HNSWDPacketClient packet;
                 uint32_t length;
 
-                packet.setType( HNSWD_PTYPE_PING_REQ );
+                packet.setType( HNSWD_PTYPE_STATUS_REQ );
 
-                std::cout << "Sending a PING packet...";
+                std::cout << "Sending a STATUS packet...";
 
-                //length = send( sockfd, packet.getPacketPtr(), packet.getPacketLength(), MSG_NOSIGNAL );
+                packet.sendAll( sockfd ); //length = send( sockfd, packet.getPacketPtr(), packet.getPacketLength(), MSG_NOSIGNAL );
 
-                std::cout << length << " bytes sent." << std::endl;
             }
 
             // Listen for packets
@@ -189,16 +173,32 @@ class HNSwitchClient: public Application
             {
                 HNSWDPacketClient    packet;
                 //HNodeSensorMeasurement reading;
-                uint32_t recvd = 0;
+                HNSWDP_RESULT_T result;
 
-                //std::cout << "start recvd..." << std::endl;
-                //recvd += recv( sockfd, packet.getPacketPtr(), packet.getMaxPacketLength(), 0 );
+                // Read the header portion of the packet
+                result = packet.rcvHeader( sockfd );
+                if( result != HNSWDP_RESULT_SUCCESS )
+                {
+                    printf( "ERROR: Failed while receiving packet header." );
+                    return Application::EXIT_SOFTWARE;
+                } 
 
-#if 0
+                // Read any payload portion of the packet
+                result = packet.rcvPayload( sockfd );
+                if( result != HNSWDP_RESULT_SUCCESS )
+                {
+                    printf( "ERROR: Failed while receiving packet payload." );
+                    return Application::EXIT_SOFTWARE;
+                } 
+
                 switch( packet.getType() )
                 {
-                    case HNSWP_TYPE_STATUS:
+                    case HNSWD_PTYPE_DAEMON_STATUS:
                     {
+                        std::string msg;
+                        packet.getMsg( msg );
+                        std::cout << "Daemon Status Recieved: " << msg << std::endl;
+#if 0
                         char timeBuf[64];
                         std::string health;
                         struct timeval statusTime;
@@ -230,16 +230,17 @@ class HNSwitchClient: public Application
                         std::cout << "  MC: " << measurementCount;
                         std::cout << "  Msg: " << msg;
                         std::cout << std::endl;
+#endif
                     }
                     break;
 
                     default:
                     {
-                        std::cout << "Unknown Packet Type - len: " << recvd << "  type: " << packet.getType() << std::endl;
+                        std::cout << "Unknown Packet Type -  type: " << packet.getType() << std::endl;
                     }
                     break;
                 }
-#endif
+
             }
 
             close( sockfd );
