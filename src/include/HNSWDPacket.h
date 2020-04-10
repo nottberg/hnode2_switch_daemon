@@ -31,4 +31,12 @@ typedef struct HNSWDPacketHeader
     uint32_t msgLen;
 }HNSWD_PKTHDR_T;
 
+typedef enum HNodeHealthStatusEnum
+{
+    HN_HEALTH_UNKNOWN,  // "UNKNOWN"
+    HN_HEALTH_OK,       // "OK"
+    HN_HEALTH_DEGRADED, // "DEGRADED"
+    HN_HEALTH_FAILED    // "FAILED"
+}HN_HEALTH_T;
+
 #endif // __HN_SWD_PACKET_H__

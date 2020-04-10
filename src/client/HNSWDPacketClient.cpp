@@ -23,7 +23,7 @@ HNSWDMsgBuffer::ensureBufferExists( uint maxlen )
 
     allocLen = (maxlen & ~0xFFF) + 0x1000;
 
-    printf("AllocLen: %d", allocLen);
+    printf("AllocLen: %d\n", allocLen);
 
     void *tmpPtr = realloc( bufPtr, allocLen );
 
@@ -126,6 +126,7 @@ HNSWDPacketClient::rcvHeader( int sockfd )
     }
 
     // Allocate space for the message data.
+    msgData.ensureBufferExists( pktHdr.msgLen );
 
     return HNSWDP_RESULT_SUCCESS;
 }
@@ -133,6 +134,9 @@ HNSWDPacketClient::rcvHeader( int sockfd )
 HNSWDP_RESULT_T 
 HNSWDPacketClient::rcvPayload( int sockfd )
 {
+    if( pktHdr.msgLen == 0 )
+        return HNSWDP_RESULT_SUCCESS;
+
     int bytesRX = recv( sockfd, msgData.buffer(), pktHdr.msgLen, 0 );
 
     if( bytesRX != pktHdr.msgLen )

@@ -10,17 +10,23 @@
 #include <syslog.h>
 
 #include <iostream>
+#include <sstream>
 
 #include "Poco/Util/ServerApplication.h"
 #include "Poco/Util/Option.h"
 #include "Poco/Util/OptionSet.h"
 #include "Poco/Util/HelpFormatter.h"
 #include "Poco/Checksum.h"
+#include <Poco/JSON/Object.h>
+#include <Poco/JSON/Parser.h>
 
 #include "HNSWDPacketDaemon.h"
 #include "HNSwitchDaemon.h"
 
 using namespace Poco::Util;
+
+namespace pjs = Poco::JSON;
+namespace pdy = Poco::Dynamic;
 
 #define MAXEVENTS 8
 
@@ -90,6 +96,7 @@ int
 HNSwitchDaemon::main( const std::vector<std::string>& args )
 {
     uint32_t lastCRC = 0xFFFF;
+        uint prevSec = 0;
 
     // Move me to before option processing.
     instanceName = HN_SWDAEMON_DEF_INSTANCE;
@@ -99,6 +106,10 @@ HNSwitchDaemon::main( const std::vector<std::string>& args )
     {
        log.setLevelLimit( HNDL_LOG_LEVEL_ALL );
     }
+
+    // Initialize the overall health
+    overallHealth.setComponent( "overall" );
+    overallHealth.setOK();
 
     // Setup logging for sub objects
     schMat.setDstLog( &log );
@@ -122,9 +133,7 @@ HNSwitchDaemon::main( const std::vector<std::string>& args )
     // Initialize the devices
     switchMgr.initDevices();
 
-    // Default to health ok
-    healthOK = true;
-
+    // Initialize for event loop
     epollFD = epoll_create1( 0 );
     if( epollFD == -1 )
     {
@@ -136,7 +145,7 @@ HNSwitchDaemon::main( const std::vector<std::string>& args )
     events = (struct epoll_event *) calloc( MAXEVENTS, sizeof event );
 
     // Start reading time now.
-    gettimeofday( &lastReadingTS, NULL );
+    //gettimeofday( &lastReadingTS, NULL );
 
     // Open Unix named socket for requests
     openListenerSocket( HN_SWDAEMON_DEVICE_NAME, instanceName );
@@ -187,34 +196,21 @@ HNSwitchDaemon::main( const std::vector<std::string>& args )
         // to make any necessary control device changes.
         switchMgr.processOnState( swidOnList );
  
+        // Send async status packets roughly every 10 seconds.
+        int diff = (newtime.tm_sec - prevSec);
+        if( (diff < 0) || (diff >= 10) )
+        {
+            prevSec = newtime.tm_sec;
+            sendStatus = true;
+        }
+
         // Check if a status update should
         // be sent
         if( sendStatus )
         {
-            struct timeval curTS;
-
-            // Get current time
-            gettimeofday( &curTS, NULL );
-
-            sendStatusPacket( &curTS );
+            sendStatusPacket( &newtime );
             sendStatus = false;
         }
-
-/* 
-            struct timeval curTS;
-
-            // Get current time
-            gettimeofday( &curTS, NULL );
-
-            // If a reading hasn't been seen for 2 minutes then
-            // degrade the health state.
-            if( (curTS.tv_sec - lastReadingTS.tv_sec) > 120 )
-            {
-                signalError( "No measurments within last 2 minutes." );
-            }
-
-
-*/
 
         // If it was a timeout then continue to next loop
         // skip socket related checks.
@@ -456,7 +452,11 @@ HNSwitchDaemon::processClientRequest( int cfd )
 
     // Read the header portion of the packet
     result = packet.rcvHeader( cfd );
-    if( result != HNSWDP_RESULT_SUCCESS )
+    if( result == HNSWDP_RESULT_NOPKT )
+    {
+        return HNSD_RESULT_SUCCESS;
+    }
+    else if( result != HNSWDP_RESULT_SUCCESS )
     {
         log.error( "ERROR: Failed while receiving packet header." );
         return HNSD_RESULT_FAILURE;
@@ -487,13 +487,13 @@ HNSwitchDaemon::processClientRequest( int cfd )
             log.info( "Reset request from client: %d", cfd );
 
             // Start out with good health.
-            healthOK = true;
+            // healthOK = true;
 
             // Reinitialize the underlying RTLSDR code.
-            //demod.init();
+            // demod.init();
 
             // Start reading time now.
-            gettimeofday( &lastReadingTS, NULL );
+            // gettimeofday( &lastReadingTS, NULL );
 
             sendStatus = true;
         }
@@ -510,6 +510,8 @@ HNSwitchDaemon::processClientRequest( int cfd )
         }
         break;
     }
+
+    return HNSD_RESULT_SUCCESS;
 }
 
 #if 0
@@ -650,22 +652,70 @@ HNSwitchDaemon::run()
 #endif
 
 void 
-HNSwitchDaemon::sendStatusPacket( struct timeval *curTS )
+HNSwitchDaemon::sendStatusPacket( struct tm *curTS )
 {
-    HNSWDPacketDaemon packet;
-    //uint32_t length;
-    //uint32_t swCount;
-    //uint32_t index;
+    std::stringstream statusMsg;
+    char tmpBuf[128];
 
-    packet.setType( HNSWD_PTYPE_DAEMON_STATUS );
-    packet.setResult( HNSWD_RCODE_SUCCESS );
-    packet.setMsg( "{ \"health\":\"OK\" } " );
+    // Create a json root object
+    pjs::Object jsRoot;
 
+    // Get pointers to the sections in the config file
+    jsRoot.set( "timezone", schMat.getTimezone() );
+
+    sprintf( tmpBuf, "%2.2d/%2.2d/%4.4d", (curTS->tm_mon + 1), curTS->tm_mday, (curTS->tm_year + 1900) );
+    jsRoot.set( "date", (const char *)tmpBuf );
+
+    sprintf( tmpBuf, "%2.2d:%2.2d:%2.2d", curTS->tm_hour, curTS->tm_min, curTS->tm_sec );
+    jsRoot.set( "time", (const char *)tmpBuf );
+
+    jsRoot.set( "overallHealth", "OK" );
+
+    pjs::Object jsDHealth;
+
+    jsDHealth.set( "component", overallHealth.getComponent() );
+    jsDHealth.set( "status", overallHealth.getStatusStr() );
+    jsDHealth.set( "msg", overallHealth.getMsg() );
+
+    jsRoot.set( "overallHealth", jsDHealth );
+
+    pjs::Array jsDCHealth;
+
+    pjs::Object jsCHealth;
+
+    HNDaemonHealth *hPtr = schMat.getHealthPtr();
+    jsCHealth.set( "component", hPtr->getComponent() );
+    jsCHealth.set( "status", hPtr->getStatusStr() );
+    jsCHealth.set( "msg", hPtr->getMsg() );
+
+    jsDCHealth.add( jsCHealth );
+
+    jsRoot.set( "componentHealth", jsDCHealth );
+
+    try
+    {
+        // Write out the generated json
+        pjs::Stringifier::stringify( jsRoot, statusMsg );
+    }
+    catch( ... )
+    {
+        return;
+    }
+
+    // Create the packet.
+    HNSWDPacketDaemon packet( HNSWD_PTYPE_DAEMON_STATUS, HNSWD_RCODE_SUCCESS, statusMsg.str() );
+
+    // Broadcast packets to listeners
     for( std::map< int, ClientRecord >::iterator it = clientMap.begin(); it != clientMap.end(); it++ )
     {
         packet.sendAll( it->first );         
     }
+}
+
 #if 0
+void 
+HNSwitchDaemon::sendSwitchInfo()
+{
     packet.setActionIndex( healthOK );
 
     packet.setParam( 0, curTS->tv_sec );
@@ -707,8 +757,8 @@ HNSwitchDaemon::sendStatusPacket( struct timeval *curTS )
     {
         length = send( it->first, packet.getPacketPtr(), packet.getPacketLength(), MSG_NOSIGNAL );         
     }
-#endif
 }
+#endif
 
 #if 0
 void 
@@ -740,6 +790,7 @@ DaemonProcess::notifyNewMeasurement( uint32_t sensorIndex, HNodeSensorMeasuremen
 void 
 HNSwitchDaemon::signalError( std::string errMsg )
 {
+#if 0
     if( (healthOK == true) || (curErrMsg != errMsg) )
     {
         syslog( LOG_ERR, "Signal Error: %s\n", errMsg.c_str() );
@@ -748,11 +799,13 @@ HNSwitchDaemon::signalError( std::string errMsg )
         curErrMsg  = errMsg;
         sendStatus = true;
     }
+#endif
 }
 
 void 
 HNSwitchDaemon::signalRunning()
 {
+#if 0
     if( healthOK == false )
     {
         syslog( LOG_ERR, "Signal Running\n" );
@@ -761,6 +814,7 @@ HNSwitchDaemon::signalRunning()
         curErrMsg.clear();
         sendStatus = true;
     }
+#endif
 }
 
 

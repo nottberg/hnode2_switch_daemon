@@ -26,7 +26,6 @@ class HNSwitchClient: public Application
     private:
         bool _helpRequested    = false;
         bool _resetRequested   = false;
-        bool _pingRequested    = false;
         bool _monitorRequested = false;
         bool _statusRequested  = false;
 
@@ -68,7 +67,11 @@ class HNSwitchClient: public Application
 				
 		    //options.addOption( Option("config-file", "f", "load configuration data from a file").required(false).repeatable(true).argument("file").callback(OptionCallback<SampleApp>(this, &SampleApp::handleConfig)));
 
-            options.addOption( Option("monitor", "m", "Leave the connection to the daemon open to monitor for asynch events.").required(false).repeatable(false));
+            options.addOption( Option("ping", "p", "Make an explicit request for a status packet from the deamon.").required(false).repeatable(false).callback(OptionCallback<HNSwitchClient>(this, &HNSwitchClient::handleOptions)));
+
+            options.addOption( Option("reset", "r", "Reset the daemon, including a re-read of its configuration.").required(false).repeatable(false).callback(OptionCallback<HNSwitchClient>(this, &HNSwitchClient::handleOptions)));
+
+            options.addOption( Option("monitor", "m", "Leave the connection to the daemon open to monitor for asynch events.").required(false).repeatable(false).callback(OptionCallback<HNSwitchClient>(this, &HNSwitchClient::handleOptions)));
         }
 	
         void handleHelp(const std::string& name, const std::string& value)
@@ -83,11 +86,9 @@ class HNSwitchClient: public Application
             if( "monitor" == name )
                 _monitorRequested = true;
             else if( "ping" == name )
-                _pingRequested = true;
+                _statusRequested = true;
             else if( "reset" == name )
                 _resetRequested = true;
-            else if( "status" == name )
-                _statusRequested = true;
         }
 
         void displayHelp()
@@ -120,6 +121,7 @@ class HNSwitchClient: public Application
             if( connect( sockfd, (struct sockaddr *) &addr, ( sizeof( sa_family_t ) + strlen( str ) + 1 ) ) == 0 )
             {
                 // Success
+                printf( "openClientSocket success - fd: %d\n", sockfd );
                 return false;
             }
 
@@ -150,19 +152,19 @@ class HNSwitchClient: public Application
 
                 packet.setType( HNSWD_PTYPE_RESET_REQ );
 
-                std::cout << "Sending a RESET packet...";
+                std::cout << "Sending a RESET request..." << std::endl;
 
                 packet.sendAll( sockfd ); //length = send( sockfd, packet.getPacketPtr(), packet.getPacketLength(), MSG_NOSIGNAL );
 
             }
-            else if( _pingRequested == true )
+            else if( _statusRequested == true )
             {
                 HNSWDPacketClient packet;
                 uint32_t length;
 
                 packet.setType( HNSWD_PTYPE_STATUS_REQ );
 
-                std::cout << "Sending a STATUS packet...";
+                std::cout << "Sending a STATUS request..." << std::endl;
 
                 packet.sendAll( sockfd ); //length = send( sockfd, packet.getPacketPtr(), packet.getPacketLength(), MSG_NOSIGNAL );
 
@@ -174,6 +176,8 @@ class HNSwitchClient: public Application
                 HNSWDPacketClient    packet;
                 //HNodeSensorMeasurement reading;
                 HNSWDP_RESULT_T result;
+
+                printf( "Waiting for packet reception...\n" );
 
                 // Read the header portion of the packet
                 result = packet.rcvHeader( sockfd );

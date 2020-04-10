@@ -26,7 +26,7 @@ HNSWDMsgBuffer::ensureBufferExists( uint maxlen )
 
     allocLen = (maxlen & ~0xFFF) + 0x1000;
 
-    printf("AllocLen: %d", allocLen);
+    printf("AllocLen: %d\n", allocLen);
 
     void *tmpPtr = realloc( bufPtr, allocLen );
 
@@ -60,12 +60,15 @@ HNSWDPacketDaemon::HNSWDPacketDaemon()
 
 HNSWDPacketDaemon::HNSWDPacketDaemon( HNSWD_PTYPE_T type, HNSWD_RCODE_T result )
 {
-
+    setType( type );
+    setResult( result );
 }
 
 HNSWDPacketDaemon::HNSWDPacketDaemon( HNSWD_PTYPE_T type, HNSWD_RCODE_T result, std::string msg )
 {
-
+    setType( type );
+    setResult( result );
+    setMsg( msg );
 }
 
 HNSWDPacketDaemon::~HNSWDPacketDaemon()
@@ -123,12 +126,22 @@ HNSWDPacketDaemon::rcvHeader( int sockfd )
 {
     int bytesRX = recv( sockfd, &pktHdr, sizeof( pktHdr ), 0 );
 
+    printf( "RX Hdr bytes: %d\n", bytesRX );
+
+    if( bytesRX == 0 )
+    {
+        return HNSWDP_RESULT_NOPKT;
+    }
+
     if( bytesRX != sizeof( pktHdr ) )
     {
         return HNSWDP_RESULT_FAILURE;
     }
 
+    printf( "PktHdr - t: %d  s: %d  ml: %d\n", pktHdr.type, pktHdr.resultCode, pktHdr.msgLen );
+
     // Allocate space for the message data.
+    msgData.ensureBufferExists( pktHdr.msgLen );
 
     return HNSWDP_RESULT_SUCCESS;
 }
@@ -136,7 +149,12 @@ HNSWDPacketDaemon::rcvHeader( int sockfd )
 HNSWDP_RESULT_T 
 HNSWDPacketDaemon::rcvPayload( int sockfd )
 {
+    if( pktHdr.msgLen == 0 )
+        return HNSWDP_RESULT_SUCCESS;
+
     int bytesRX = recv( sockfd, msgData.buffer(), pktHdr.msgLen, 0 );
+
+    printf( "RX Payload bytes: %d\n", bytesRX );
 
     if( bytesRX != pktHdr.msgLen )
     {
@@ -152,6 +170,8 @@ HNSWDPacketDaemon::sendAll( int sockfd )
     int length;
 
     length = send( sockfd, &pktHdr, sizeof( pktHdr ), MSG_NOSIGNAL );
+
+    printf( "TX sent: %d\n", length );
 
     if( length != sizeof( pktHdr ) )
     {

@@ -8,6 +8,7 @@
 #include <list>
 
 #include "HNDaemonLog.h"
+#include "HNDaemonHealth.h"
 
 typedef enum HNSScheduleMatrixResult
 {
@@ -111,6 +112,8 @@ class HNScheduleMatrix
     private:
         HNDaemonLogSrc log;
 
+        HNDaemonHealth health;
+
         std::string rootDirPath;
 
         std::string deviceName;
@@ -128,10 +131,13 @@ class HNScheduleMatrix
 
         void setDstLog( HNDaemonLog *logPtr );
 
+        HNDaemonHealth* getHealthPtr();
+
         void setRootDirectory( std::string path );
         std::string getRootDirectory();
 
         void setTimezone( std::string tzname );
+        std::string getTimezone();
 
         void clear();
 

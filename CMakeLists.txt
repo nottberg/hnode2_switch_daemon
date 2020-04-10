@@ -7,6 +7,7 @@ SET( HNSWITCHD_SRC
      ${CMAKE_SOURCE_DIR}/src/daemon/hnswitchd.cpp
      ${CMAKE_SOURCE_DIR}/src/daemon/HNSwitchDaemon.cpp
      ${CMAKE_SOURCE_DIR}/src/daemon/HNDaemonLog.cpp
+     ${CMAKE_SOURCE_DIR}/src/daemon/HNDaemonHealth.cpp
      ${CMAKE_SOURCE_DIR}/src/daemon/HNScheduleMatrix.cpp
      ${CMAKE_SOURCE_DIR}/src/daemon/HNSwitchManager.cpp
      ${CMAKE_SOURCE_DIR}/src/daemon/HNSWDPacketDaemon.cpp

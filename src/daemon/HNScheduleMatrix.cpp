@@ -246,6 +246,7 @@ HNSDay::debugPrint( uint offset, HNDaemonLogSrc &log )
 }
 
 HNScheduleMatrix::HNScheduleMatrix()
+: health( "schedule matrix" )
 {
     rootDirPath = HNS_SCH_CFG_DEFAULT_PATH;
 
@@ -266,6 +267,12 @@ HNScheduleMatrix::setDstLog( HNDaemonLog *logPtr )
     log.setDstLog( logPtr );
 }
 
+HNDaemonHealth* 
+HNScheduleMatrix::getHealthPtr()
+{
+    return &health;
+}
+
 void 
 HNScheduleMatrix::setRootDirectory( std::string path )
 {
@@ -282,6 +289,12 @@ void
 HNScheduleMatrix::setTimezone( std::string tzname )
 {
     timezone = tzname;
+}
+
+std::string
+HNScheduleMatrix::getTimezone()
+{
+    return timezone;
 }
 
 HNSM_RESULT_T 
@@ -454,6 +467,7 @@ HNScheduleMatrix::loadSchedule( std::string devname, std::string instance )
     catch( Poco::Exception ex )
     {
         log.error( "ERROR: Schedule matrix config file json parse failure: %s", ex.displayText().c_str() );
+        health.setStatusMsg( HN_HEALTH_FAILED, "Schedule matrix config file json parser failure." );
         its.close();
         return HNSM_RESULT_FAILURE;
     }
@@ -468,6 +482,8 @@ HNScheduleMatrix::loadSchedule( std::string devname, std::string instance )
     debugPrint();
 
     log.info( "Schedule matrix config successfully loaded." );
+
+    health.setOK();
 
     // Done
     return HNSM_RESULT_SUCCESS;
