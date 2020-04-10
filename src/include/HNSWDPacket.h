@@ -39,4 +39,17 @@ typedef enum HNodeHealthStatusEnum
     HN_HEALTH_FAILED    // "FAILED"
 }HN_HEALTH_T;
 
+// These error codes should be unique to a given
+// daemon and error string, never remove/renumber
+// only add new ones.
+typedef enum HNodeSwitchDeamonErrorCodeEnum
+{
+    HNSWD_ERRCODE_NO_ERROR          = 0,
+    HNSWD_ERRCODE_INTERNAL_FAILURE  = 1,
+    HNSWD_ECODE_SM_FAILED_PATH_GEN  = 2,
+    HNSWD_ECODE_SM_CONFIG_MISSING   = 3,
+    HNSWD_ECODE_SM_CONFIG_OPEN      = 4,
+    HNSWD_ECODE_SM_CONFIG_PARSER    = 5,
+}HNSWD_ERRCODE_T;
+
 #endif // __HN_SWD_PACKET_H__

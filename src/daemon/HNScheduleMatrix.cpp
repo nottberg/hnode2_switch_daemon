@@ -351,7 +351,8 @@ HNScheduleMatrix::loadSchedule( std::string devname, std::string instance )
     // Generate and verify filename
     if( generateFilePath( fpath ) != HNSM_RESULT_SUCCESS )
     {
-        log.error( "ERROR: Failed to generate path to schedule matrix config for: %s %s", devname, instance );
+        log.error( "ERROR: Failed to generate path to schedule matrix config for: %s %s", devname.c_str(), instance.c_str() );
+        health.setStatusMsg( HN_HEALTH_FAILED, HNSWD_ECODE_SM_FAILED_PATH_GEN, devname.c_str(), instance.c_str() );
         return HNSM_RESULT_FAILURE;
     }    
 
@@ -364,6 +365,7 @@ HNScheduleMatrix::loadSchedule( std::string devname, std::string instance )
     if( file.exists() == false || file.isFile() == false )
     {
         log.error( "ERROR: Schedule matrix config file does not exist: %s", path.toString().c_str() );
+        health.setStatusMsg( HN_HEALTH_FAILED, HNSWD_ECODE_SM_CONFIG_MISSING, path.toString().c_str() ); 
         return HNSM_RESULT_FAILURE;
     }
 
@@ -374,6 +376,7 @@ HNScheduleMatrix::loadSchedule( std::string devname, std::string instance )
     if( its.is_open() == false )
     {
         log.error( "ERROR: Schedule matrix config file open failed: %s", path.toString().c_str() );
+        health.setStatusMsg( HN_HEALTH_FAILED, HNSWD_ECODE_SM_CONFIG_OPEN, path.toString().c_str() ); 
         return HNSM_RESULT_FAILURE;
     }
 
@@ -467,7 +470,7 @@ HNScheduleMatrix::loadSchedule( std::string devname, std::string instance )
     catch( Poco::Exception ex )
     {
         log.error( "ERROR: Schedule matrix config file json parse failure: %s", ex.displayText().c_str() );
-        health.setStatusMsg( HN_HEALTH_FAILED, "Schedule matrix config file json parser failure." );
+        health.setStatusMsg( HN_HEALTH_FAILED, HNSWD_ECODE_SM_CONFIG_PARSER, ex.displayText().c_str() ); 
         its.close();
         return HNSM_RESULT_FAILURE;
     }
