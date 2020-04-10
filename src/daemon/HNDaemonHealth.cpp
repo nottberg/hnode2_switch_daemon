@@ -6,12 +6,27 @@
 // in the shared header file.
 static const char *sErrorCodeFormatStrings[] =
 {
-    "",                        // HNSWD_ERRCODE_NO_ERROR
-    "Internal Software Error", // HNSWD_ERRCODE_INTERNAL_FAILURE
+    "",                                                             // HNSWD_ERRCODE_NO_ERROR
+    "Internal Software Error",                                      // HNSWD_ERRCODE_INTERNAL_FAILURE
+
     "Failed to generate path to schedule matrix config for: %s %s", // HNSWD_ECODE_SM_FAILED_PATH_GEN
-    "Schedule matrix config file does not exist: %s", // HNSWD_ECODE_SM_CONFIG_MISSING
-    "Schedule matrix config file open failed: %s", // HNSWD_ECODE_SM_CONFIG_OPEN
-    "Schedule matrix config file json parse failure: %s", //  HNSWD_ECODE_SM_CONFIG_PARSER
+    "Schedule matrix config file does not exist: %s",               // HNSWD_ECODE_SM_CONFIG_MISSING
+    "Schedule matrix config file open failed: %s",                  // HNSWD_ECODE_SM_CONFIG_OPEN
+    "Schedule matrix config file json parse failure: %s",           // HNSWD_ECODE_SM_CONFIG_PARSER
+
+    "Failed to generate path to switch manager config for: %s %s",  // HNSWD_ECODE_SWM_FAILED_PATH_GEN
+    "Switch manager config file does not exist: %s",                // HNSWD_ECODE_SWM_CONFIG_MISSING
+    "Switch manager config file open failed: %s",                   // HNSWD_ECODE_SWM_CONFIG_OPEN
+    "Switch manager config file json parse failure: %s",            // HNSWD_ECODE_SWM_CONFIG_PARSER
+
+    "Failure to open i2c bus device %s: %s",                        // HNSWD_ECODE_MCP280XX_I2CBUS_OPEN  
+    "Failure to set target device to 0x%x for i2c bus %s: %s",      // HNSWD_ECODE_MCP280XX_SET_TARGET    
+    "Failure to zero port state for i2c addr 0x%x",                 // HNSWD_ECODE_MCP280XX_ZERO_STATE    
+    "Failure to set io direction to inbound for i2c addr 0x%x",     // HNSWD_ECODE_MCP280XX_SET_INBOUND    
+    "Failure to disable pullups for i2c addr 0x%x",                 // HNSWD_ECODE_MCP280XX_SET_PULLUP    
+    "Failure to read state for i2c addr 0x%x",                      // HNSWD_ECODE_MCP280XX_READ_STATE   
+    "Failure to set io direction to outbound for i2c addr 0x%x",    // HNSWD_ECODE_MCP280XX_SET_OUTBOUND 
+    "Failure to write state to i2c addr 0x%x",                      // HNSWD_ECODE_MCP280XX_WRITE_STATE   
 };
 
 HNDaemonHealth::HNDaemonHealth()

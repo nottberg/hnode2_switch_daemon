@@ -9,6 +9,7 @@
 #include <stdio.h>
 
 #include "HNDaemonLog.h"
+#include "HNDaemonHealth.h"
 
 typedef enum HNSwitchManagerResultEnum
 {
@@ -25,6 +26,7 @@ class HNSWDevice
 
     protected:
         HNDaemonLogSrc log;
+        HNDaemonHealth health;
 
     public:
         HNSWDevice();
@@ -149,6 +151,7 @@ class HNSwitchManager
 {
     private:
         HNDaemonLogSrc log;
+        HNDaemonHealth health;
 
         std::string rootDirPath;
         HNSwitchManagerNotifications *notifySink;
