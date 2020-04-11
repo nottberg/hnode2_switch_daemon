@@ -27,8 +27,17 @@ class HNDaemonHealth
         std::string     getComponent();
         HN_HEALTH_T     getStatus();
         std::string     getStatusStr();
-        HNSWD_ERRCODE_T getErrCode();
+        HNSWD_ERRCODE_T getErrorCode();
         std::string     getMsg();
+};
+
+class HNDHConsumerInterface
+{
+    public:
+        virtual uint getHealthComponentCount() = 0;
+
+        virtual HNDaemonHealth* getHealthComponent( uint index ) = 0;
+
 };
 
 #endif // __HN_DAEMON_HEALTH_H__

@@ -82,6 +82,21 @@ HNSWDevice::getDesc()
     return desc;
 }
 
+uint 
+HNSWDevice::getHealthComponentCount()
+{
+    return 1;
+}
+
+HNDaemonHealth* 
+HNSWDevice::getHealthComponent( uint index )
+{
+    if( index == 0 )
+        return &health;
+
+    return NULL;
+}
+
 HNSWI2CExpander::HNSWI2CExpander()
 {
     devnum  = 0;
@@ -858,6 +873,32 @@ HNSwitchManager::processOnState( std::vector< std::string > &swidOnList )
     }
 
     return HNSW_RESULT_SUCCESS;
+}
+
+uint 
+HNSwitchManager::getHealthComponentCount()
+{
+    return ( 1 + deviceMap.size() );
+}
+
+HNDaemonHealth* 
+HNSwitchManager::getHealthComponent( uint index )
+{
+    if( index == 0 )
+        return &health;
+    else if( index < getHealthComponentCount() )
+    {
+        index -= 1;
+        for( std::map< std::string, HNSWDevice* >::iterator it = deviceMap.begin(); it != deviceMap.end(); it++ )
+        {
+            if( index == 0 )
+                return it->second->getHealthComponent( 0 );
+
+            index -= 1;
+        }
+    }
+
+    return NULL;
 }
 
 unsigned int 

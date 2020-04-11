@@ -17,7 +17,7 @@ typedef enum HNSwitchManagerResultEnum
     HNSW_RESULT_FAILURE
 }HNSW_RESULT_T;
 
-class HNSWDevice
+class HNSWDevice : public HNDHConsumerInterface
 {
     private:
         std::string id;
@@ -41,6 +41,9 @@ class HNSWDevice
         std::string getModel();
         std::string getID();
         std::string getDesc();
+
+        virtual uint getHealthComponentCount();
+        virtual HNDaemonHealth* getHealthComponent( uint index );
 
         virtual void parsePair( std::string, std::string ) = 0;
         virtual void debugPrint( uint offset ) = 0;
@@ -147,7 +150,7 @@ class HNSwitchManagerNotifications
 
 #define HNSW_ROOT_DIRECTORY_DEFAULT "/var/cache/hnode2"
 
-class HNSwitchManager
+class HNSwitchManager : public HNDHConsumerInterface
 {
     private:
         HNDaemonLogSrc log;
@@ -188,6 +191,9 @@ class HNSwitchManager
         HNSWSwitch* getSwitchByID( std::string swid );
 
         HNSW_RESULT_T processOnState( std::vector< std::string > &swidOnList );
+
+        virtual uint getHealthComponentCount();
+        virtual HNDaemonHealth* getHealthComponent( uint index );
 
         void debugPrint();
 };

@@ -26,7 +26,8 @@ static const char *sErrorCodeFormatStrings[] =
     "Failure to disable pullups for i2c addr 0x%x",                 // HNSWD_ECODE_MCP280XX_SET_PULLUP    
     "Failure to read state for i2c addr 0x%x",                      // HNSWD_ECODE_MCP280XX_READ_STATE   
     "Failure to set io direction to outbound for i2c addr 0x%x",    // HNSWD_ECODE_MCP280XX_SET_OUTBOUND 
-    "Failure to write state to i2c addr 0x%x",                      // HNSWD_ECODE_MCP280XX_WRITE_STATE   
+    "Failure to write state to i2c addr 0x%x",                      // HNSWD_ECODE_MCP280XX_WRITE_STATE
+    "One or more of the daemon subcomponents is in a failing state.", // HNSWD_ECODE_SUBCOMPONENT
 };
 
 HNDaemonHealth::HNDaemonHealth()
@@ -105,7 +106,7 @@ HNDaemonHealth::getStatusStr()
 }
 
 HNSWD_ERRCODE_T 
-HNDaemonHealth::getErrCode()
+HNDaemonHealth::getErrorCode()
 {
     return errorCode;
 }

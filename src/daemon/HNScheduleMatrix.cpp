@@ -246,7 +246,7 @@ HNSDay::debugPrint( uint offset, HNDaemonLogSrc &log )
 }
 
 HNScheduleMatrix::HNScheduleMatrix()
-: health( "schedule matrix" )
+: health( "Schedule Matrix" )
 {
     rootDirPath = HNS_SCH_CFG_DEFAULT_PATH;
 
@@ -265,12 +265,6 @@ void
 HNScheduleMatrix::setDstLog( HNDaemonLog *logPtr )
 {
     log.setDstLog( logPtr );
-}
-
-HNDaemonHealth* 
-HNScheduleMatrix::getHealthPtr()
-{
-    return &health;
 }
 
 void 
@@ -490,6 +484,21 @@ HNScheduleMatrix::loadSchedule( std::string devname, std::string instance )
 
     // Done
     return HNSM_RESULT_SUCCESS;
+}
+
+uint 
+HNScheduleMatrix::getHealthComponentCount()
+{
+    return 1;
+}
+
+HNDaemonHealth* 
+HNScheduleMatrix::getHealthComponent( uint index )
+{
+    if( index == 0 )
+        return &health;
+
+    return NULL;
 }
 
 HNSM_RESULT_T 

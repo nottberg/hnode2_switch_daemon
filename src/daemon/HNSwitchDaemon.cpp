@@ -108,7 +108,7 @@ HNSwitchDaemon::main( const std::vector<std::string>& args )
     }
 
     // Initialize the overall health
-    overallHealth.setComponent( "overall" );
+    overallHealth.setComponent( "Overall" );
     overallHealth.setOK();
 
     // Setup logging for sub objects
@@ -660,17 +660,60 @@ HNSwitchDaemon::sendStatusPacket( struct tm *curTS )
     // Create a json root object
     pjs::Object jsRoot;
 
-    // Get pointers to the sections in the config file
+    // Add the timezone setting
     jsRoot.set( "timezone", schMat.getTimezone() );
 
+    // Add the current date
     sprintf( tmpBuf, "%2.2d/%2.2d/%4.4d", (curTS->tm_mon + 1), curTS->tm_mday, (curTS->tm_year + 1900) );
     jsRoot.set( "date", (const char *)tmpBuf );
 
+    // Add the current time
     sprintf( tmpBuf, "%2.2d:%2.2d:%2.2d", curTS->tm_hour, curTS->tm_min, curTS->tm_sec );
     jsRoot.set( "time", (const char *)tmpBuf );
 
-    jsRoot.set( "overallHealth", "OK" );
+    // Accumulate system health state
+    pjs::Array jsDCHealth;
+    pjs::Object jsCHealth;
 
+    overallHealth.setOK();
+
+    uint ccnt = schMat.getHealthComponentCount();
+    for( uint cindx = 0; cindx < ccnt; cindx++ )
+    {
+        HNDaemonHealth *hPtr = schMat.getHealthComponent( cindx );
+
+        if( hPtr->getStatus() != HN_HEALTH_OK )
+            overallHealth.setStatusMsg( HN_HEALTH_FAILED, HNSWD_ECODE_SUBCOMPONENT );
+
+        jsCHealth.set( "component", hPtr->getComponent() );
+        jsCHealth.set( "status", hPtr->getStatusStr() );
+        sprintf( tmpBuf, "%d", hPtr->getErrorCode() );
+        jsCHealth.set( "errCode", (const char *)tmpBuf );
+        jsCHealth.set( "msg", hPtr->getMsg() );
+
+        jsDCHealth.add( jsCHealth );
+    }
+
+    ccnt = switchMgr.getHealthComponentCount();
+    for( uint cindx = 0; cindx < ccnt; cindx++ )
+    {
+        HNDaemonHealth *hPtr = switchMgr.getHealthComponent( cindx );
+
+        if( hPtr->getStatus() != HN_HEALTH_OK )
+            overallHealth.setStatusMsg( HN_HEALTH_FAILED, HNSWD_ECODE_SUBCOMPONENT );
+
+        jsCHealth.set( "component", hPtr->getComponent() );
+        jsCHealth.set( "status", hPtr->getStatusStr() );
+        sprintf( tmpBuf, "%d", hPtr->getErrorCode() );
+        jsCHealth.set( "errCode", (const char *)tmpBuf );
+        jsCHealth.set( "msg", hPtr->getMsg() );
+
+        jsDCHealth.add( jsCHealth );
+    }
+
+    jsRoot.set( "componentHealth", jsDCHealth );
+
+    // Add overall health to output.
     pjs::Object jsDHealth;
 
     jsDHealth.set( "component", overallHealth.getComponent() );
@@ -679,19 +722,7 @@ HNSwitchDaemon::sendStatusPacket( struct tm *curTS )
 
     jsRoot.set( "overallHealth", jsDHealth );
 
-    pjs::Array jsDCHealth;
-
-    pjs::Object jsCHealth;
-
-    HNDaemonHealth *hPtr = schMat.getHealthPtr();
-    jsCHealth.set( "component", hPtr->getComponent() );
-    jsCHealth.set( "status", hPtr->getStatusStr() );
-    jsCHealth.set( "msg", hPtr->getMsg() );
-
-    jsDCHealth.add( jsCHealth );
-
-    jsRoot.set( "componentHealth", jsDCHealth );
-
+    // Render into a json string for the status packet.
     try
     {
         // Write out the generated json

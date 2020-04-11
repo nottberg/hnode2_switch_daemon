@@ -107,7 +107,7 @@ class HNSDay
 
 #define HNS_SCH_CFG_DEFAULT_PATH  "/var/cache/hnode2/"
 
-class HNScheduleMatrix
+class HNScheduleMatrix : public HNDHConsumerInterface
 {
     private:
         HNDaemonLogSrc log;
@@ -131,8 +131,6 @@ class HNScheduleMatrix
 
         void setDstLog( HNDaemonLog *logPtr );
 
-        HNDaemonHealth* getHealthPtr();
-
         void setRootDirectory( std::string path );
         std::string getRootDirectory();
 
@@ -144,6 +142,9 @@ class HNScheduleMatrix
         HNSM_RESULT_T loadSchedule( std::string devname, std::string instance );
 
         HNSM_RESULT_T getSwitchOnList( struct tm *time, std::vector< std::string > &swidList );
+
+        virtual uint getHealthComponentCount();
+        virtual HNDaemonHealth* getHealthComponent( uint index );
 
         void debugPrint();
 };
