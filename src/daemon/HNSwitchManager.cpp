@@ -195,6 +195,10 @@ HNSWI2CExpander::applyNextState()
         HNSW_RESULT_T result;
         uint curState;
 
+        // Clean up if already open
+        if( i2cfd == 0 )
+            return HNSW_RESULT_FAILURE;
+
         // Read the current state
         result = mcp23008GetPortState( curState );
    
@@ -270,7 +274,8 @@ HNSWI2CExpander::mcp23008Init()
     if( ( i2cfd = open( devfn, O_RDWR ) ) < 0 ) 
     {
         log.error( "ERROR: Failure to open i2c bus device %s: %s", devfn, strerror( errno ) );
-        health.setStatusMsg( HN_HEALTH_FAILED, HNSWD_ECODE_MCP280XX_I2CBUS_OPEN, devfn, strerror( errno ) );     
+        health.setStatusMsg( HN_HEALTH_FAILED, HNSWD_ECODE_MCP280XX_I2CBUS_OPEN, devfn, strerror( errno ) );
+        i2cfd = 0;
         return HNSW_RESULT_FAILURE;
     }
 
@@ -349,6 +354,9 @@ HNSWI2CExpander::mcp23008GetPortMode( uint &value )
 {
     int32_t result;
 
+    if( i2cfd == 0 )
+        return HNSW_RESULT_FAILURE;
+
     result = i2c_smbus_read_byte_data( i2cfd, MCP23008_IODIR );
 
     if( result < 0 )
@@ -363,6 +371,9 @@ HNSW_RESULT_T
 HNSWI2CExpander::mcp23008GetPortPullup( uint &value )
 {
     int32_t result;
+
+    if( i2cfd == 0 )
+        return HNSW_RESULT_FAILURE;
 
     result = i2c_smbus_read_byte_data( i2cfd, MCP23008_GPPU );
 
@@ -379,6 +390,9 @@ HNSWI2CExpander::mcp23008GetPortState( uint &value )
 {
     int32_t result;
 
+    if( i2cfd == 0 )
+        return HNSW_RESULT_FAILURE;
+
     result = i2c_smbus_read_byte_data( i2cfd, MCP23008_GPIO );
 
     if( result < 0 )
@@ -393,6 +407,9 @@ HNSW_RESULT_T
 HNSWI2CExpander::mcp23008SetPortMode( uint value )
 {
     int32_t result;
+
+    if( i2cfd == 0 )
+        return HNSW_RESULT_FAILURE;
 
     result = i2c_smbus_write_byte_data( i2cfd, MCP23008_IODIR, value );
 
@@ -410,6 +427,9 @@ HNSWI2CExpander::mcp23008SetPortPullup( uint value )
 {
     int32_t result;
 
+    if( i2cfd == 0 )
+        return HNSW_RESULT_FAILURE;
+
     result = i2c_smbus_write_byte_data( i2cfd, MCP23008_GPPU, value );
 
     if( result < 0 )
@@ -425,6 +445,9 @@ HNSW_RESULT_T
 HNSWI2CExpander::mcp23008SetPortState( uint value )
 {
     int32_t result;
+
+    if( i2cfd == 0 )
+        return HNSW_RESULT_FAILURE;
 
     result = i2c_smbus_write_byte_data( i2cfd, MCP23008_OLAT, value );
 
