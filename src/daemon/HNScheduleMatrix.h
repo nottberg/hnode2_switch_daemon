@@ -38,7 +38,11 @@ class HNS24HTime
        ~HNS24HTime();
 
         HNSM_RESULT_T setFromHMS( uint hour, uint minute, uint second );
+        HNSM_RESULT_T setFromSeconds( uint seconds );
         HNSM_RESULT_T parseTime( std::string value );
+
+        void addSeconds( uint seconds );
+        void addDuration( HNS24HTime &duration );
 
         uint getSeconds() const;
         void getHMS( uint &hour, uint &minute, uint &second );
@@ -61,6 +65,7 @@ class HNSAction
 
     public:
         HNSAction();
+        HNSAction( HNS_ACT_T action, HNS24HTime &startTime, HNS24HTime &endTime, std::string swID );
        ~HNSAction();
 
         HNSM_RESULT_T handlePair( std::string key, std::string value );
@@ -145,6 +150,33 @@ class HNScheduleMatrix : public HNDHConsumerInterface
 
         virtual uint getHealthComponentCount();
         virtual HNDaemonHealth* getHealthComponent( uint index );
+
+        void debugPrint();
+};
+
+
+class HNSequenceQueue
+{
+    private:
+        HNDaemonLogSrc log;
+
+        std::list< HNSAction > actionList;
+
+        HNSM_RESULT_T addUniformSequence( struct tm *time, std::string onTime, std::string offTime, std::string swidList );
+
+    public:
+        HNSequenceQueue();
+       ~HNSequenceQueue();
+
+        void setDstLog( HNDaemonLog *logPtr );
+
+        bool hasActions();
+
+        void clearSequence();
+
+        HNSM_RESULT_T addSequence( struct tm *time, std::string seqJSON, std::string &errMsg );
+
+        HNSM_RESULT_T getSwitchOnList( struct tm *time, std::vector< std::string > &swidList );
 
         void debugPrint();
 };

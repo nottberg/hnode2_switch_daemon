@@ -8,13 +8,14 @@
 typedef enum HNodeSWDPacketTypeEnum
 {
     HNSWD_PTYPE_NOTSET,
-    HNSWD_PTYPE_DAEMON_STATUS,    // Daemon response with status info.
-    HNSWD_PTYPE_DAEMON_EVENT,  // Asynch event originating from daemon.
-    HNSWD_PTYPE_STATUS_REQ,    // Request Status of daemon
+    HNSWD_PTYPE_DAEMON_STATUS,  // Daemon response with status info.
+    HNSWD_PTYPE_DAEMON_EVENT,   // Asynch event originating from daemon.
+    HNSWD_PTYPE_STATUS_REQ,     // Request Status of daemon
     HNSWD_PTYPE_RESET_REQ,       
     HNSWD_PTYPE_RESET_RSP,
-    HNSWD_PTYPE_OT_SW_SEQ_REQ, // One time sequence of switches to on.
-    HNSWD_PTYPE_OT_SW_SEQ_RSP
+    HNSWD_PTYPE_SEQ_ADD_REQ,    // Add a one time sequence of switch actions.
+    HNSWD_PTYPE_SEQ_CANCEL_REQ, // Cancel all future sequence actions.
+    HNSWD_PTYPE_SEQ_RSP,
 }HNSWD_PTYPE_T;
 
 typedef enum HNodeSWDPacketResultCodeEnum

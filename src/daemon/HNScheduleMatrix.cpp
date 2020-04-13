@@ -3,6 +3,8 @@
 #include <fstream>
 #include <ios>
 #include <exception>
+#include <iterator>
+#include <regex>
 
 #include <Poco/Path.h>
 #include <Poco/File.h>
@@ -74,6 +76,17 @@ HNS24HTime::setFromHMS( uint hour, uint min, uint sec )
 }
 
 HNSM_RESULT_T 
+HNS24HTime::setFromSeconds( uint seconds )
+{
+    // Set to provided value, cieling 24 hours.
+    secOfDay = seconds;
+    if( secOfDay > (24 * 60 * 60) )
+        secOfDay = (24 * 60 * 60);
+
+    return HNSM_RESULT_SUCCESS;
+}
+
+HNSM_RESULT_T 
 HNS24HTime::parseTime( std::string value )
 {
     uint hour;
@@ -85,10 +98,36 @@ HNS24HTime::parseTime( std::string value )
     return setFromHMS( hour, min, sec );
 }
 
+void
+HNS24HTime::addSeconds( uint seconds )
+{
+    // Add the two times, cap 24 hours
+    secOfDay = (secOfDay + seconds); 
+    if( secOfDay > (24 * 60 * 60) )
+        secOfDay = (24 * 60 * 60);
+
+}
+
+void
+HNS24HTime::addDuration( HNS24HTime &duration )
+{
+    // Add the two times, cap 24 hours
+    secOfDay = (secOfDay + duration.secOfDay); 
+    if( secOfDay > (24 * 60 * 60) )
+        secOfDay = (24 * 60 * 60);
+}
 
 HNSAction::HNSAction()
 {
 
+}
+
+HNSAction::HNSAction( HNS_ACT_T actval, HNS24HTime &startTime, HNS24HTime &endTime, std::string swID )
+{
+    action = actval;
+    start  = startTime;
+    end    = endTime;
+    swid   = swID;
 }
 
 HNSAction::~HNSAction()
@@ -528,4 +567,351 @@ HNScheduleMatrix::debugPrint()
     }
 }
 
+
+HNSequenceQueue::HNSequenceQueue()
+{
+
+}
+
+HNSequenceQueue::~HNSequenceQueue()
+{
+
+}
+
+void 
+HNSequenceQueue::setDstLog( HNDaemonLog *logPtr )
+{
+    log.setDstLog( logPtr );
+}
+
+void 
+HNSequenceQueue::clearSequence()
+{
+    actionList.clear();
+}
+
+#if 0
+{
+  "seqType":"uniform",
+  "onTime":"00:01:00",
+  "offTime":"00:05:00",
+  "swidList": "sw1 sw2"
+}
+
+or
+
+{
+  "seqType":"explicit",
+  "seqArray": [
+    {
+      "onTime":"00:01:00",
+      "offTime":"00:05:00",
+      "swidSet":"sw1"  
+    },
+    {
+      "onTime":"00:02:00",
+      "offTime":"00:07:00",
+      "swidSet":"sw2 sw3"  
+    }
+  ]
+}
+#endif
+
+HNSM_RESULT_T 
+HNSequenceQueue::addUniformSequence( struct tm *time, std::string onStr, std::string offStr, std::string swidList )
+{
+    HNSM_RESULT_T result;
+    HNS24HTime onPeriod;
+    HNS24HTime offPeriod;
+    const std::regex ws_re("\\s+"); // whitespace
+    std::sregex_token_iterator it( swidList.begin(), swidList.end(), ws_re, -1 );
+    const std::sregex_token_iterator end;
+
+    // Get the on time duration
+    result = onPeriod.parseTime( onStr );
+    if( result != HNSM_RESULT_SUCCESS )
+    {
+        return result;
+    }
+
+    // Get the off time duration
+    result = offPeriod.parseTime( offStr );
+    if( result != HNSM_RESULT_SUCCESS )
+    {
+        return result;
+    }
+
+    // Walk the swid string
+    while( it != end )
+    {
+        HNS24HTime startTime;
+        HNS24HTime endTime;
+
+        std::cout << "swid: " << *it << std::endl;
+
+        // If the queue is empty then create the first entry
+        if( actionList.empty() == true )
+        {
+            // The start time sould be the current time
+            startTime.setFromHMS( time->tm_hour, time->tm_min, time->tm_sec );
+
+            // End time should be start time, plus on period duration
+            endTime.setFromHMS( time->tm_hour, time->tm_min, time->tm_sec );
+            endTime.addDuration( onPeriod );
+
+            // Add a new switch action to the queue.
+            HNSAction swact( HNS_ACT_SWON, startTime, endTime, *it );
+            actionList.push_back( swact );
+        }
+        else
+        {
+            // Since there is a preceding entry, base all of the time
+            // calculation off its end time
+            HNSAction& lastAct = actionList.back();
+
+            // Init start time with ending time of previous.
+            startTime.setFromSeconds( lastAct.getEndSeconds() );
+            
+            // Delay offPeriod seconds between switches, 
+            // but ensure at least one second of delay.
+            if( offPeriod.getSeconds() == 0 )
+                startTime.addSeconds( 1 );
+            else
+                startTime.addDuration( offPeriod );
+            
+            // Based of start time, end after onPeriod seconds.
+            endTime.setFromSeconds( startTime.getSeconds() );
+            endTime.addDuration( onPeriod );
+
+            // Add a new switch action to the end of the queue.
+            HNSAction swact( HNS_ACT_SWON, startTime, endTime, *it );
+            actionList.push_back( swact );
+        }
+
+        it++;
+    }
+
+}
+
+HNSM_RESULT_T 
+HNSequenceQueue::addSequence( struct tm *time, std::string seqJSON, std::string &errMsg )
+{
+    // Parse the json
+    try
+    {
+        // Attempt to parse the json    
+        pjs::Parser parser;
+        pdy::Var varRoot = parser.parse( seqJSON );
+
+        // Get a pointer to the root object
+        pjs::Object::Ptr jsRoot = varRoot.extract< pjs::Object::Ptr >();
+
+        // Special case handling of the "seqType" field.  As remainder of parsing depends on it.
+        std::string empty;
+        std::string seqType = jsRoot->optValue( "seqType", empty );;
+
+        if( seqType.empty() )
+        {
+            // Missing required fields.
+            log.warn( "Warning: Received Add Sequence request is missing the required 'seqType' field." );
+            return HNSM_RESULT_FAILURE;
+        }
+
+        // Handle the various supported sequence types
+        if( "uniform" == seqType )
+        {
+            std::string onDuration = jsRoot->optValue( "onDuration", empty );
+            if( onDuration.empty() )
+            {
+                // Missing required fields.
+                log.warn( "Warning: Received Add Sequence request is missing the required 'onTime' field." );
+                return HNSM_RESULT_FAILURE;
+            }
+
+            std::string offDuration = jsRoot->optValue( "offDuration", empty );
+            if( offDuration.empty() )
+            {
+                // Missing required fields.
+                log.warn( "Warning: Received Add Sequence request is missing the required 'offTime' field." );
+                return HNSM_RESULT_FAILURE;
+            }
+
+            std::string swidList = jsRoot->optValue( "swidList", empty );
+            if( swidList.empty() )
+            {
+                // Missing required fields.
+                log.warn( "Warning: Received Add Sequence request is missing the required 'swidList' field." );
+                return HNSM_RESULT_FAILURE;
+            }
+
+            // Perform the necessary additions to the sequence queue.
+            return addUniformSequence( time, onDuration, offDuration, swidList );
+        }
+        else if( "explicit" == seqType )
+        {
+            log.warn( "Warning: Received Add Sequence request has unimplemented 'seqType': %s", seqType.c_str() );
+            return HNSM_RESULT_FAILURE;       
+        }
+        else
+        {
+            log.warn( "Warning: Received Add Sequence request has unsupported 'seqType': %s", seqType.c_str() );
+            return HNSM_RESULT_FAILURE;       
+        }
+#if 0
+        // Handle each key of the root objects
+        for( pjs::Object::ConstIterator it = jsRoot->begin(); it != jsRoot->end(); it++ )
+        {
+            if( it->first == "scheduleTimezone" )
+            {
+                if( it->second.isString() == false )
+                {
+                    log.warn( "Warning: Non-string scheduleTimezone value." );
+                    continue;
+                }
+
+                setTimezone( it->second );
+            }
+            else if( it->first == "scheduleMatrix" )
+            {
+                if( jsRoot->isObject( it ) == false )
+                {
+                    log.warn( "Warning: Non-object scheduleMatrix value." );
+                    continue;
+                }
+
+                pjs::Object::Ptr jsDayObj = jsRoot->getObject( it->first );
+
+                for( pjs::Object::ConstIterator dit = jsDayObj->begin(); dit != jsDayObj->end(); dit++ )
+                {
+
+                    for( uint dindx = 0; dindx < HNS_DAY_CNT; dindx++ )
+                    {
+                        if( scDayNames[dindx] == dit->first )
+                        {
+                            if( jsDayObj->isArray( dit ) == false )
+                            {
+                                log.warn( "Warning: Non-array day object value: %s", dit->first.c_str() );
+                                break;
+                            }
+
+                            pjs::Array::Ptr jsActArr = jsDayObj->getArray( dit->first );
+
+                            for( uint index = 0; index < jsActArr->size(); index++ )
+                            {
+                                if( jsActArr->isObject( index ) == true )
+                                {
+                                    pjs::Object::Ptr jsAct = jsActArr->getObject( index );
+
+                                    HNSAction tmpAction;
+                                    
+                                    for( pjs::Object::ConstIterator aoit = jsAct->begin(); aoit != jsAct->end(); aoit++ )
+                                    {
+                                        if( aoit->second.isString() == false )
+                                        {
+                                            log.warn( "Warning: Non-string action object value" );
+                                            break;
+                                        }
+                                        
+                                        tmpAction.handlePair( aoit->first, aoit->second );
+                                    }
+
+                                    dayArr[ dindx ].addAction( tmpAction );
+                                }
+                                else
+                                {
+                                    log.warn( "Warning: Non-object type for day action." );
+                                }
+                            }
+
+                            // Correct day already found,
+                            // skip any additional loop iterations.
+                            break;
+                        } 
+
+                    }
+                }
+
+            }
+        }
+#endif
+    }
+    catch( Poco::Exception ex )
+    {
+        log.error( "ERROR: Schedule matrix config file json parse failure: %s", ex.displayText().c_str() );
+        return HNSM_RESULT_FAILURE;
+    }
+
+    // Add new actions to the end of the list
+
+}
+
+bool
+HNSequenceQueue::hasActions()
+{
+    return ( actionList.empty() ? false : true );
+}
+
+HNSM_RESULT_T 
+HNSequenceQueue::getSwitchOnList( struct tm *time, std::vector< std::string > &swidList )
+{
+    if( time == NULL )
+        return HNSM_RESULT_FAILURE;
+
+    swidList.clear();
+
+    if( actionList.empty() == true )
+        return HNSM_RESULT_SUCCESS;
+
+    HNS24HTime tgtTime;
+    tgtTime.setFromHMS( time->tm_hour, time->tm_min, time->tm_sec );
+
+    // Loop through the queue until it is empty or
+    // and action has started execution.
+    while( actionList.empty() == false )
+    {
+        // Examine the first action on the queue.
+        HNSAction& curAct = actionList.front();
+
+        // Figure out whether the action is valid
+        if( curAct.startIsBefore( tgtTime ) )
+        {
+            // Check whether the action is active or expired.
+            if( curAct.endIsAfter( tgtTime ) )
+            {
+                 // The current action is active, return it in the list.
+                 swidList.push_back( curAct.getSwID() );
+                 debugPrint();
+                 return HNSM_RESULT_SUCCESS;
+            }
+            else
+            {
+                // The current time is past the end of this action
+                // so get rid of the current action and check the
+                // next one.
+                actionList.pop_front();
+                continue;
+            }
+        }
+        else
+        {
+            // Start time is after current time so nothing to do, exit
+            debugPrint();
+            return HNSM_RESULT_SUCCESS;
+        }
+    }
+
+    debugPrint();
+    return HNSM_RESULT_SUCCESS;
+}
+
+void 
+HNSequenceQueue::debugPrint()
+{
+    log.debug( "==== Sequence Queue ====" );
+
+    for( std::list< HNSAction >::iterator it = actionList.begin(); it != actionList.end(); it++ )
+    {
+       it->debugPrint( 2, log );
+    }
+}
 

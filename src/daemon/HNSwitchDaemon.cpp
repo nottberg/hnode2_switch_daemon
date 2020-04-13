@@ -113,6 +113,7 @@ HNSwitchDaemon::main( const std::vector<std::string>& args )
 
     // Setup logging for sub objects
     schMat.setDstLog( &log );
+    seqQueue.setDstLog( &log );
     switchMgr.setDstLog( &log );
 
     if( _helpRequested )
@@ -152,6 +153,8 @@ HNSwitchDaemon::main( const std::vector<std::string>& args )
 
     log.info( "Entering hnode2 switch daemon event loop" );
 
+    bool addOne = false;
+
     // The event loop 
     quit = false;
     while( quit == false )
@@ -184,10 +187,22 @@ HNSwitchDaemon::main( const std::vector<std::string>& args )
         ltime = time( &ltime );
         localtime_r( &ltime, &newtime );
 
+        if( addOne == false )
+        {
+            std::string testSeqJSON( "{ \"seqType\":\"uniform\", \"onDuration\":\"00:02:00\", \"offDuration\":\"00:01:00\", \"swidList\": \"sw1 sw2\" }" );
+            std::string error;
+            seqQueue.addSequence( &newtime, testSeqJSON, error );
+            seqQueue.debugPrint();
+            addOne = true;
+        }
+
         // Query the schedule matrix for the list of
         // switches that should be active currently.
         std::vector< std::string > swidOnList;
-        schMat.getSwitchOnList( &newtime, swidOnList );
+        if( seqQueue.hasActions() == true )
+            seqQueue.getSwitchOnList( &newtime, swidOnList );
+        else
+            schMat.getSwitchOnList( &newtime, swidOnList );
 
         // Do some logging
         lastCRC = logSwitchChanges( &newtime, swidOnList, lastCRC );
@@ -500,7 +515,8 @@ HNSwitchDaemon::processClientRequest( int cfd )
         break;
 
         // Request a manual sequence of switch activity.
-        case HNSWD_PTYPE_OT_SW_SEQ_REQ:
+        case HNSWD_PTYPE_SEQ_ADD_REQ:
+        case HNSWD_PTYPE_SEQ_CANCEL_REQ:
         break;
 
         // Unknown packet

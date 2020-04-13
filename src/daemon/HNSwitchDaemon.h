@@ -57,17 +57,14 @@ class HNSwitchDaemon : public Poco::Util::ServerApplication, public HNSwitchMana
 
         std::map< int, ClientRecord > clientMap;
 
+        HNScheduleMatrix schMat;
+        HNSequenceQueue  seqQueue;
         HNSwitchManager  switchMgr;
 
         bool           sendStatus;
 
         HNDaemonHealth overallHealth;
 
-        //bool           healthOK;
-        //std::string    curErrMsg;
-        //struct timeval lastReadingTS;
-
-        HNScheduleMatrix schMat;
 
         HNSD_RESULT_T addSocketToEPoll( int sfd );
         HNSD_RESULT_T removeSocketFromEPoll( int sfd );        
