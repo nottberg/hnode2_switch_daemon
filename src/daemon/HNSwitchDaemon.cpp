@@ -191,7 +191,7 @@ HNSwitchDaemon::main( const std::vector<std::string>& args )
         {
             std::string testSeqJSON( "{ \"seqType\":\"uniform\", \"onDuration\":\"00:02:00\", \"offDuration\":\"00:01:00\", \"swidList\": \"sw1 sw2\" }" );
             std::string error;
-            seqQueue.addSequence( &newtime, testSeqJSON, error );
+            seqQueue.addUniformSequence( &newtime, testSeqJSON, error );
             seqQueue.debugPrint();
             addOne = true;
         }
@@ -223,7 +223,7 @@ HNSwitchDaemon::main( const std::vector<std::string>& args )
         // be sent
         if( sendStatus )
         {
-            sendStatusPacket( &newtime );
+            sendStatusPacket( &newtime, swidOnList );
             sendStatus = false;
         }
 
@@ -668,7 +668,7 @@ HNSwitchDaemon::run()
 #endif
 
 void 
-HNSwitchDaemon::sendStatusPacket( struct tm *curTS )
+HNSwitchDaemon::sendStatusPacket( struct tm *curTS, std::vector< std::string > &swOnList )
 {
     std::stringstream statusMsg;
     char tmpBuf[128];
@@ -686,6 +686,17 @@ HNSwitchDaemon::sendStatusPacket( struct tm *curTS )
     // Add the current time
     sprintf( tmpBuf, "%2.2d:%2.2d:%2.2d", curTS->tm_hour, curTS->tm_min, curTS->tm_sec );
     jsRoot.set( "time", (const char *)tmpBuf );
+
+    // Add the switch on list
+    std::string swOnStr;
+    for( std::vector< std::string >::iterator it = swOnList.begin(); it != swOnList.end(); it++ )
+    {
+        if( swOnStr.empty() == false )
+            swOnStr += " ";
+
+        swOnStr += *it;
+    }
+    jsRoot.set( "swOnList", swOnStr );
 
     // Accumulate system health state
     pjs::Array jsDCHealth;

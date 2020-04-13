@@ -162,8 +162,6 @@ class HNSequenceQueue
 
         std::list< HNSAction > actionList;
 
-        HNSM_RESULT_T addUniformSequence( struct tm *time, std::string onTime, std::string offTime, std::string swidList );
-
     public:
         HNSequenceQueue();
        ~HNSequenceQueue();
@@ -174,7 +172,7 @@ class HNSequenceQueue
 
         void clearSequence();
 
-        HNSM_RESULT_T addSequence( struct tm *time, std::string seqJSON, std::string &errMsg );
+        HNSM_RESULT_T addUniformSequence( struct tm *time, std::string seqJSON, std::string &errMsg );
 
         HNSM_RESULT_T getSwitchOnList( struct tm *time, std::vector< std::string > &swidList );
 

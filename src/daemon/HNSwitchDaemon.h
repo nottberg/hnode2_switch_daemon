@@ -73,7 +73,7 @@ class HNSwitchDaemon : public Poco::Util::ServerApplication, public HNSwitchMana
         HNSD_RESULT_T processClientRequest( int efd );
         HNSD_RESULT_T closeClientConnection( int cfd );
 
-        void sendStatusPacket( struct tm *curTS );
+        void sendStatusPacket( struct tm *curTS, std::vector< std::string > &swOnList );
 
         uint32_t logSwitchChanges( struct tm *time, std::vector< std::string > &onList, uint32_t lastCRC );
 
