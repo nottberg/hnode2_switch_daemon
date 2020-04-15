@@ -107,6 +107,9 @@ HNSwitchDaemon::main( const std::vector<std::string>& args )
        log.setLevelLimit( HNDL_LOG_LEVEL_ALL );
     }
 
+    // Initialize packet send flags
+    sendStatus = false;
+
     // Initialize the overall health
     overallHealth.setComponent( "Overall" );
     overallHealth.setOK();
@@ -153,8 +156,6 @@ HNSwitchDaemon::main( const std::vector<std::string>& args )
 
     log.info( "Entering hnode2 switch daemon event loop" );
 
-    bool addOne = false;
-
     // The event loop 
     quit = false;
     while( quit == false )
@@ -187,15 +188,6 @@ HNSwitchDaemon::main( const std::vector<std::string>& args )
         ltime = time( &ltime );
         localtime_r( &ltime, &newtime );
 
-        if( addOne == false )
-        {
-            std::string testSeqJSON( "{ \"seqType\":\"uniform\", \"onDuration\":\"00:02:00\", \"offDuration\":\"00:01:00\", \"swidList\": \"sw1 sw2\" }" );
-            std::string error;
-            seqQueue.addUniformSequence( &newtime, testSeqJSON, error );
-            seqQueue.debugPrint();
-            addOne = true;
-        }
-
         // Query the schedule matrix for the list of
         // switches that should be active currently.
         std::vector< std::string > swidOnList;
@@ -210,6 +202,9 @@ HNSwitchDaemon::main( const std::vector<std::string>& args )
         // Run the list of ON switches through the switch manager 
         // to make any necessary control device changes.
         switchMgr.processOnState( swidOnList );
+
+        // Update the overall health situation
+        updateOverallHealth();
  
         // Send async status packets roughly every 10 seconds.
         int diff = (newtime.tm_sec - prevSec);
@@ -514,8 +509,50 @@ HNSwitchDaemon::processClientRequest( int cfd )
         }
         break;
 
+        case HNSWD_PTYPE_HEALTH_REQ:
+        {
+            log.info( "Component Health request from client: %d", cfd );
+            sendComponentHealthPacket( cfd );
+        }
+        break;
+
         // Request a manual sequence of switch activity.
         case HNSWD_PTYPE_SEQ_ADD_REQ:
+        {
+            std::string testSeqJSON( "{ \"seqType\":\"uniform\", \"onDuration\":\"00:02:00\", \"offDuration\":\"00:01:00\", \"swidList\": \"sw1 sw2\" }" );
+            HNSM_RESULT_T result;
+            std::string error;
+            struct tm newtime;
+            time_t ltime;
+ 
+            // Get the current time 
+            ltime = time( &ltime );
+            localtime_r( &ltime, &newtime );
+
+            // Attempt to add the sequence
+            result = seqQueue.addUniformSequence( &newtime, testSeqJSON, error );
+            
+            if( result != HNSM_RESULT_SUCCESS )
+            {
+                // Create the packet.
+                HNSWDPacketDaemon packet( HNSWD_PTYPE_SEQ_RSP, HNSWD_RCODE_FAILURE, error );
+
+                // Send packet to requesting client
+                packet.sendAll( cfd );
+
+                return HNSD_RESULT_SUCCESS;
+            }
+            
+            seqQueue.debugPrint();
+
+            // Create the packet.
+            HNSWDPacketDaemon packet( HNSWD_PTYPE_SEQ_RSP, HNSWD_RCODE_SUCCESS, error );
+
+            // Send packet to requesting client
+            packet.sendAll( cfd );
+        }
+        break;
+
         case HNSWD_PTYPE_SEQ_CANCEL_REQ:
         break;
 
@@ -668,6 +705,31 @@ HNSwitchDaemon::run()
 #endif
 
 void 
+HNSwitchDaemon::updateOverallHealth()
+{
+    // Accumulate system health state
+    overallHealth.setOK();
+
+    uint ccnt = schMat.getHealthComponentCount();
+    for( uint cindx = 0; cindx < ccnt; cindx++ )
+    {
+        HNDaemonHealth *hPtr = schMat.getHealthComponent( cindx );
+
+        if( hPtr->getStatus() != HN_HEALTH_OK )
+            overallHealth.setStatusMsg( HN_HEALTH_FAILED, HNSWD_ECODE_SUBCOMPONENT );
+    }
+
+    ccnt = switchMgr.getHealthComponentCount();
+    for( uint cindx = 0; cindx < ccnt; cindx++ )
+    {
+        HNDaemonHealth *hPtr = switchMgr.getHealthComponent( cindx );
+
+        if( hPtr->getStatus() != HN_HEALTH_OK )
+            overallHealth.setStatusMsg( HN_HEALTH_FAILED, HNSWD_ECODE_SUBCOMPONENT );
+    }
+}
+
+void 
 HNSwitchDaemon::sendStatusPacket( struct tm *curTS, std::vector< std::string > &swOnList )
 {
     std::stringstream statusMsg;
@@ -697,6 +759,89 @@ HNSwitchDaemon::sendStatusPacket( struct tm *curTS, std::vector< std::string > &
         swOnStr += *it;
     }
     jsRoot.set( "swOnList", swOnStr );
+
+#if 0
+    // Accumulate system health state
+    pjs::Array jsDCHealth;
+    pjs::Object jsCHealth;
+
+    overallHealth.setOK();
+
+    uint ccnt = schMat.getHealthComponentCount();
+    for( uint cindx = 0; cindx < ccnt; cindx++ )
+    {
+        HNDaemonHealth *hPtr = schMat.getHealthComponent( cindx );
+
+        if( hPtr->getStatus() != HN_HEALTH_OK )
+            overallHealth.setStatusMsg( HN_HEALTH_FAILED, HNSWD_ECODE_SUBCOMPONENT );
+
+        jsCHealth.set( "component", hPtr->getComponent() );
+        jsCHealth.set( "status", hPtr->getStatusStr() );
+        sprintf( tmpBuf, "%d", hPtr->getErrorCode() );
+        jsCHealth.set( "errCode", (const char *)tmpBuf );
+        jsCHealth.set( "msg", hPtr->getMsg() );
+
+        jsDCHealth.add( jsCHealth );
+    }
+
+    ccnt = switchMgr.getHealthComponentCount();
+    for( uint cindx = 0; cindx < ccnt; cindx++ )
+    {
+        HNDaemonHealth *hPtr = switchMgr.getHealthComponent( cindx );
+
+        if( hPtr->getStatus() != HN_HEALTH_OK )
+            overallHealth.setStatusMsg( HN_HEALTH_FAILED, HNSWD_ECODE_SUBCOMPONENT );
+
+        jsCHealth.set( "component", hPtr->getComponent() );
+        jsCHealth.set( "status", hPtr->getStatusStr() );
+        sprintf( tmpBuf, "%d", hPtr->getErrorCode() );
+        jsCHealth.set( "errCode", (const char *)tmpBuf );
+        jsCHealth.set( "msg", hPtr->getMsg() );
+
+        jsDCHealth.add( jsCHealth );
+    }
+
+    jsRoot.set( "componentHealth", jsDCHealth );
+#endif
+    // Add overall health to output.
+    pjs::Object jsDHealth;
+
+    jsDHealth.set( "component", overallHealth.getComponent() );
+    jsDHealth.set( "status", overallHealth.getStatusStr() );
+    jsDHealth.set( "msg", overallHealth.getMsg() );
+
+    jsRoot.set( "overallHealth", jsDHealth );
+
+    // Render into a json string for the status packet.
+    try
+    {
+        // Write out the generated json
+        pjs::Stringifier::stringify( jsRoot, statusMsg );
+    }
+    catch( ... )
+    {
+        return;
+    }
+
+    // Create the packet.
+    HNSWDPacketDaemon packet( HNSWD_PTYPE_DAEMON_STATUS, HNSWD_RCODE_SUCCESS, statusMsg.str() );
+
+    // Broadcast packets to listeners
+    for( std::map< int, ClientRecord >::iterator it = clientMap.begin(); it != clientMap.end(); it++ )
+    {
+        packet.sendAll( it->first );         
+    }
+}
+
+
+void 
+HNSwitchDaemon::sendComponentHealthPacket( int clientFD )
+{
+    std::stringstream statusMsg;
+    char tmpBuf[64];
+
+    // Create a json root object
+    pjs::Object jsRoot;
 
     // Accumulate system health state
     pjs::Array jsDCHealth;
@@ -761,14 +906,12 @@ HNSwitchDaemon::sendStatusPacket( struct tm *curTS, std::vector< std::string > &
     }
 
     // Create the packet.
-    HNSWDPacketDaemon packet( HNSWD_PTYPE_DAEMON_STATUS, HNSWD_RCODE_SUCCESS, statusMsg.str() );
+    HNSWDPacketDaemon packet( HNSWD_PTYPE_HEALTH_RSP, HNSWD_RCODE_SUCCESS, statusMsg.str() );
 
-    // Broadcast packets to listeners
-    for( std::map< int, ClientRecord >::iterator it = clientMap.begin(); it != clientMap.end(); it++ )
-    {
-        packet.sendAll( it->first );         
-    }
+    // Send packet to requesting client
+    packet.sendAll( clientFD );
 }
+
 
 #if 0
 void 

@@ -28,6 +28,8 @@ class HNSwitchClient: public Application
         bool _resetRequested   = false;
         bool _monitorRequested = false;
         bool _statusRequested  = false;
+        bool _healthRequested  = false;
+        bool _seqaddRequested  = false;
 
     public:
 	    HNSwitchClient()
@@ -67,11 +69,15 @@ class HNSwitchClient: public Application
 				
 		    //options.addOption( Option("config-file", "f", "load configuration data from a file").required(false).repeatable(true).argument("file").callback(OptionCallback<SampleApp>(this, &SampleApp::handleConfig)));
 
-            options.addOption( Option("ping", "p", "Make an explicit request for a status packet from the deamon.").required(false).repeatable(false).callback(OptionCallback<HNSwitchClient>(this, &HNSwitchClient::handleOptions)));
+            options.addOption( Option("status", "s", "Make an explicit request for a status packet from the deamon.").required(false).repeatable(false).callback(OptionCallback<HNSwitchClient>(this, &HNSwitchClient::handleOptions)));
 
             options.addOption( Option("reset", "r", "Reset the daemon, including a re-read of its configuration.").required(false).repeatable(false).callback(OptionCallback<HNSwitchClient>(this, &HNSwitchClient::handleOptions)));
 
             options.addOption( Option("monitor", "m", "Leave the connection to the daemon open to monitor for asynch events.").required(false).repeatable(false).callback(OptionCallback<HNSwitchClient>(this, &HNSwitchClient::handleOptions)));
+
+            options.addOption( Option("health", "c", "Request a component health report.").required(false).repeatable(false).callback(OptionCallback<HNSwitchClient>(this, &HNSwitchClient::handleOptions)));
+
+            options.addOption( Option("seqadd", "q", "Schedule a uniform manual switch sequence.").required(false).repeatable(false).callback(OptionCallback<HNSwitchClient>(this, &HNSwitchClient::handleOptions)));
         }
 	
         void handleHelp(const std::string& name, const std::string& value)
@@ -85,10 +91,15 @@ class HNSwitchClient: public Application
         {
             if( "monitor" == name )
                 _monitorRequested = true;
-            else if( "ping" == name )
+            else if( "status" == name )
                 _statusRequested = true;
             else if( "reset" == name )
                 _resetRequested = true;
+            else if( "health" == name )
+                _healthRequested = true;
+            else if( "seqadd" == name )
+                _seqaddRequested = true;
+
         }
 
         void displayHelp()
@@ -154,7 +165,7 @@ class HNSwitchClient: public Application
 
                 std::cout << "Sending a RESET request..." << std::endl;
 
-                packet.sendAll( sockfd ); //length = send( sockfd, packet.getPacketPtr(), packet.getPacketLength(), MSG_NOSIGNAL );
+                packet.sendAll( sockfd );
 
             }
             else if( _statusRequested == true )
@@ -166,8 +177,30 @@ class HNSwitchClient: public Application
 
                 std::cout << "Sending a STATUS request..." << std::endl;
 
-                packet.sendAll( sockfd ); //length = send( sockfd, packet.getPacketPtr(), packet.getPacketLength(), MSG_NOSIGNAL );
+                packet.sendAll( sockfd );
 
+            }
+            else if( _healthRequested == true )
+            {
+                HNSWDPacketClient packet;
+                uint32_t length;
+
+                packet.setType( HNSWD_PTYPE_HEALTH_REQ );
+
+                std::cout << "Sending a HEALTH request..." << std::endl;
+
+                packet.sendAll( sockfd );
+            }
+            else if( _seqaddRequested == true )
+            {
+                HNSWDPacketClient packet;
+                uint32_t length;
+
+                packet.setType( HNSWD_PTYPE_SEQ_ADD_REQ );
+
+                std::cout << "Sending a Uniform Sequence Add request..." << std::endl;
+
+                packet.sendAll( sockfd );
             }
 
             // Listen for packets
@@ -235,6 +268,22 @@ class HNSwitchClient: public Application
                         std::cout << "  Msg: " << msg;
                         std::cout << std::endl;
 #endif
+                    }
+                    break;
+
+                    case HNSWD_PTYPE_HEALTH_RSP:
+                    {
+                        std::string msg;
+                        packet.getMsg( msg );
+                        std::cout << "Component Health Response Recieved: " << msg << std::endl;
+                    }
+                    break;
+
+                    case HNSWD_PTYPE_SEQ_RSP:
+                    {
+                        std::string msg;
+                        packet.getMsg( msg );
+                        std::cout << "Uniform Sequence Response Recieved: " << msg << std::endl;
                     }
                     break;
 

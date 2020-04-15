@@ -61,10 +61,12 @@ class HNSwitchDaemon : public Poco::Util::ServerApplication, public HNSwitchMana
         HNSequenceQueue  seqQueue;
         HNSwitchManager  switchMgr;
 
+
         bool           sendStatus;
 
         HNDaemonHealth overallHealth;
 
+        void updateOverallHealth();
 
         HNSD_RESULT_T addSocketToEPoll( int sfd );
         HNSD_RESULT_T removeSocketFromEPoll( int sfd );        
@@ -74,6 +76,7 @@ class HNSwitchDaemon : public Poco::Util::ServerApplication, public HNSwitchMana
         HNSD_RESULT_T closeClientConnection( int cfd );
 
         void sendStatusPacket( struct tm *curTS, std::vector< std::string > &swOnList );
+        void sendComponentHealthPacket( int clientFD );
 
         uint32_t logSwitchChanges( struct tm *time, std::vector< std::string > &onList, uint32_t lastCRC );
 
