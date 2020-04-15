@@ -287,9 +287,40 @@ class HNSwitchClient: public Application
                     {
                         std::string msg;
                         packet.getMsg( msg );
-                        std::cout << "Daemon Status Recieved - result code: " << packet.getResult() << std::endl << msg << std::endl;
+                        std::cout << "=== Daemon Status Recieved - result code: " << packet.getResult() << " ===" << std::endl;
 
+                        // Parse the response
+                        try
+                        {
+                            std::string empty;
+                            pjs::Parser parser;
 
+                            // Attempt to parse the json
+                            pdy::Var varRoot = parser.parse( msg );
+
+                            // Get a pointer to the root object
+                            pjs::Object::Ptr jsRoot = varRoot.extract< pjs::Object::Ptr >();
+
+                            std::string date = jsRoot->optValue( "date", empty );
+                            std::string time = jsRoot->optValue( "time", empty );
+                            std::string tz   = jsRoot->optValue( "timezone", empty );
+                            std::string swON = jsRoot->optValue( "swOnList", empty );
+
+                            pjs::Object::Ptr jsOHealth = jsRoot->getObject( "overallHealth" );
+                            
+                            std::string ohstat = jsOHealth->optValue( "status", empty );
+                            std::string ohmsg = jsOHealth->optValue( "msg", empty ); 
+
+                            printf( "       date: %s\n", date.c_str() );
+                            printf( "       time: %s\n", time.c_str() );
+                            printf( "   timezone: %s\n", tz.c_str() );
+                            printf( "  Switch On: %s\n", swON.c_str() );
+                            printf( "     Health: %s (%s)\n", ohstat.c_str(), ohmsg.c_str() );
+                        }
+                        catch( Poco::Exception ex )
+                        {
+                            std::cout << "  ERROR: Response message not parsable: " << msg << std::endl;
+                        }
                     }
                     break;
 
