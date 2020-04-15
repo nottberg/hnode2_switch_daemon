@@ -472,6 +472,8 @@ HNSwitchDaemon::processClientRequest( int cfd )
         return HNSD_RESULT_FAILURE;
     } 
 
+    log.info( "Pkt - type: %d  status: %d  msglen: %d", packet.getType(), packet.getResult(), packet.getMsgLen() );
+
     // Read any payload portion of the packet
     result = packet.rcvPayload( cfd );
     if( result != HNSWDP_RESULT_SUCCESS )
@@ -519,8 +521,8 @@ HNSwitchDaemon::processClientRequest( int cfd )
         // Request a manual sequence of switch activity.
         case HNSWD_PTYPE_SEQ_ADD_REQ:
         {
-            std::string testSeqJSON( "{ \"seqType\":\"uniform\", \"onDuration\":\"00:02:00\", \"offDuration\":\"00:01:00\", \"swidList\": \"sw1 sw2\" }" );
             HNSM_RESULT_T result;
+            std::string msg;
             std::string error;
             struct tm newtime;
             time_t ltime;
@@ -530,7 +532,8 @@ HNSwitchDaemon::processClientRequest( int cfd )
             localtime_r( &ltime, &newtime );
 
             // Attempt to add the sequence
-            result = seqQueue.addUniformSequence( &newtime, testSeqJSON, error );
+            packet.getMsg( msg );
+            result = seqQueue.addUniformSequence( &newtime, msg, error );
             
             if( result != HNSM_RESULT_SUCCESS )
             {
@@ -566,143 +569,6 @@ HNSwitchDaemon::processClientRequest( int cfd )
 
     return HNSD_RESULT_SUCCESS;
 }
-
-#if 0
-HNSD_RESULT_T
-HNSwitchDaemon::run()
-{
-    // Startup the switch manager
-    switchMgr.start();   
-
-    // The event loop
-    while( quit == false )
-    {
-        int n, i;
-
-        // Check for events
-        n = epoll_wait( epollFD, events, MAXEVENTS, 0 );
-
-        // EPoll error
-        if( n < 0 )
-        {
-            // If we've been interrupted by an incoming signal, continue, wait for socket indication
-            if( errno == EINTR )
-                continue;
-
-            // Handle error
-        }
-
-        // Timeout
-        if( n == 0 )
-        {
-            struct timeval curTS;
-
-            // Get current time
-            gettimeofday( &curTS, NULL );
-
-            // If a reading hasn't been seen for 2 minutes then
-            // degrade the health state.
-            if( (curTS.tv_sec - lastReadingTS.tv_sec) > 120 )
-            {
-                signalError( "No measurments within last 2 minutes." );
-            }
-
-            // Check if a status update should
-            // be sent
-            if( sendStatus )
-            {
-                sendStatusPacket( &curTS );
-                sendStatus = false;
-            }
-
-            // Run the RTLSDR loop
-            if( switchMgr.evaluateActions() )
-            {
-	            daemon_log( LOG_ERR, "Fatal error while evaluating switch actions, exiting...\n" );
-	            break;
-            }
-            continue;
-        }
-
-        // Socket event
-        for( i = 0; i < n; i++ )
-	    {
-            // Dispatch based on file desriptor
-            if( signalFD == events[i].data.fd )
-            {
-                // There was signal activity from libdaemon
-	            if( (events[i].events & EPOLLERR) || (events[i].events & EPOLLHUP) || (!(events[i].events & EPOLLIN)) )
-	            {
-                    // An error has occured on this fd, or the socket is not ready for reading (why were we notified then?) 
-	                daemon_log( LOG_ERR, "epoll error on daemon signal socket\n" );
-	                close (events[i].data.fd);
-	                continue;
-	            }
-
-                // Read the signal from the socket
-                int sig = daemon_signal_next();
-                if( sig <= 0 ) 
-                {
-                    daemon_log(LOG_ERR, "daemon_signal_next() failed: %s", strerror(errno));
-                    break;
-                }
-
-                // Act on the signal
-                switch (sig)
-                {
-
-                    case SIGINT:
-                    case SIGQUIT:
-                    case SIGTERM:
-                    {
-                        daemon_log( LOG_WARNING, "Got SIGINT, SIGQUIT or SIGTERM." );
-                        quit = true;
-                    }
-                    break;
-
-                    case SIGHUP:
-                    default:
-                    {
-                        daemon_log( LOG_INFO, "HUP - Ignoring signal" );
-                        break;
-                    }
-                }
-            }
-            else if( acceptFD == events[i].data.fd )
-	        {
-                // New client connections
-	            if( (events[i].events & EPOLLERR) || (events[i].events & EPOLLHUP) || (!(events[i].events & EPOLLIN)) )
-	            {
-                    /* An error has occured on this fd, or the socket is not ready for reading (why were we notified then?) */
-                    daemon_log( LOG_ERR, "accept socket closed - restarting\n" );
-                    close (events[i].data.fd);
-	                continue;
-	            }
-
-                processNewClientConnections();
-                continue;
-            }
-            else
-            {
-                // New client connections
-	            if( (events[i].events & EPOLLERR) || (events[i].events & EPOLLHUP) || (!(events[i].events & EPOLLIN)) )
-	            {
-                    // An error has occured on this fd, or the socket is not ready for reading (why were we notified then?)
-                    closeClientConnection( events[i].data.fd );
-
-	                continue;
-	            }
-
-                // Handle a request from a client.
-                processClientRequest( events[i].data.fd );
-            }
-        }
-    }
-
-    // Shutdown the switch manager
-    switchMgr.stop();
-}
-#endif
 
 void 
 HNSwitchDaemon::updateOverallHealth()
@@ -760,49 +626,6 @@ HNSwitchDaemon::sendStatusPacket( struct tm *curTS, std::vector< std::string > &
     }
     jsRoot.set( "swOnList", swOnStr );
 
-#if 0
-    // Accumulate system health state
-    pjs::Array jsDCHealth;
-    pjs::Object jsCHealth;
-
-    overallHealth.setOK();
-
-    uint ccnt = schMat.getHealthComponentCount();
-    for( uint cindx = 0; cindx < ccnt; cindx++ )
-    {
-        HNDaemonHealth *hPtr = schMat.getHealthComponent( cindx );
-
-        if( hPtr->getStatus() != HN_HEALTH_OK )
-            overallHealth.setStatusMsg( HN_HEALTH_FAILED, HNSWD_ECODE_SUBCOMPONENT );
-
-        jsCHealth.set( "component", hPtr->getComponent() );
-        jsCHealth.set( "status", hPtr->getStatusStr() );
-        sprintf( tmpBuf, "%d", hPtr->getErrorCode() );
-        jsCHealth.set( "errCode", (const char *)tmpBuf );
-        jsCHealth.set( "msg", hPtr->getMsg() );
-
-        jsDCHealth.add( jsCHealth );
-    }
-
-    ccnt = switchMgr.getHealthComponentCount();
-    for( uint cindx = 0; cindx < ccnt; cindx++ )
-    {
-        HNDaemonHealth *hPtr = switchMgr.getHealthComponent( cindx );
-
-        if( hPtr->getStatus() != HN_HEALTH_OK )
-            overallHealth.setStatusMsg( HN_HEALTH_FAILED, HNSWD_ECODE_SUBCOMPONENT );
-
-        jsCHealth.set( "component", hPtr->getComponent() );
-        jsCHealth.set( "status", hPtr->getStatusStr() );
-        sprintf( tmpBuf, "%d", hPtr->getErrorCode() );
-        jsCHealth.set( "errCode", (const char *)tmpBuf );
-        jsCHealth.set( "msg", hPtr->getMsg() );
-
-        jsDCHealth.add( jsCHealth );
-    }
-
-    jsRoot.set( "componentHealth", jsDCHealth );
-#endif
     // Add overall health to output.
     pjs::Object jsDHealth;
 

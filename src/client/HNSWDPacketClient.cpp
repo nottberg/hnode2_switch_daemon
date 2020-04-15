@@ -55,12 +55,15 @@ HNSWDPacketClient::HNSWDPacketClient()
 
 HNSWDPacketClient::HNSWDPacketClient( HNSWD_PTYPE_T type, HNSWD_RCODE_T result )
 {
-
+    setType( type );
+    setResult( result );
 }
 
 HNSWDPacketClient::HNSWDPacketClient( HNSWD_PTYPE_T type, HNSWD_RCODE_T result, std::string msg )
 {
-
+    setType( type );
+    setResult( result );
+    setMsg( msg );
 }
 
 HNSWDPacketClient::~HNSWDPacketClient()
@@ -132,10 +135,25 @@ HNSWDPacketClient::rcvHeader( int sockfd )
 HNSWDP_RESULT_T 
 HNSWDPacketClient::rcvPayload( int sockfd )
 {
+    int bytesRX;
+
     if( pktHdr.msgLen == 0 )
         return HNSWDP_RESULT_SUCCESS;
 
-    int bytesRX = recv( sockfd, msgData.buffer(), pktHdr.msgLen, 0 );
+    while( 1 )
+    {
+        bytesRX = recv( sockfd, msgData.buffer(), pktHdr.msgLen, 0 );
+
+        if( bytesRX < 0 )
+        {
+            if( errno == EAGAIN )
+                continue;
+
+            return HNSWDP_RESULT_FAILURE;
+        }
+
+        break;
+    }
 
     if( bytesRX != pktHdr.msgLen )
     {
@@ -152,6 +170,8 @@ HNSWDPacketClient::sendAll( int sockfd )
 
     length = send( sockfd, &pktHdr, sizeof( pktHdr ), MSG_NOSIGNAL );
 
+    printf( "Send1: %d\n", length );
+
     if( length != sizeof( pktHdr ) )
     {
         return HNSWDP_RESULT_FAILURE;
@@ -161,6 +181,8 @@ HNSWDPacketClient::sendAll( int sockfd )
         return HNSWDP_RESULT_SUCCESS;
 
     length = send( sockfd, msgData.buffer(), pktHdr.msgLen, MSG_NOSIGNAL );
+
+    printf( "Send2: %d\n", length );
 
     if( length != pktHdr.msgLen )
     {

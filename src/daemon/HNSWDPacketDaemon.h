@@ -47,6 +47,8 @@ class HNSWDPacketDaemon
         void setResult( HNSWD_RCODE_T value );
         HNSWD_RCODE_T getResult();
 
+        uint getMsgLen();
+
         void setMsg( std::string value );
         uint8_t* getMsg( uint &msgLen );
         void getMsg( std::string &msgStr );

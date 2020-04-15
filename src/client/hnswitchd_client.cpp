@@ -10,8 +10,14 @@
 #include "Poco/Util/Option.h"
 #include "Poco/Util/OptionSet.h"
 #include "Poco/Util/HelpFormatter.h"
+#include <Poco/Path.h>
+#include <Poco/File.h>
+#include <Poco/JSON/Object.h>
+#include <Poco/JSON/Parser.h>
+
 #include <iostream>
 #include <sstream>
+#include <fstream>
 
 #include "HNSWDPacketClient.h"
 
@@ -20,6 +26,9 @@ using Poco::Util::Option;
 using Poco::Util::OptionSet;
 using Poco::Util::HelpFormatter;
 using Poco::Util::OptionCallback;
+
+namespace pjs = Poco::JSON;
+namespace pdy = Poco::Dynamic;
 
 class HNSwitchClient: public Application
 {
@@ -30,6 +39,8 @@ class HNSwitchClient: public Application
         bool _statusRequested  = false;
         bool _healthRequested  = false;
         bool _seqaddRequested  = false;
+
+        std::string _seqaddFilePath;
 
     public:
 	    HNSwitchClient()
@@ -77,7 +88,7 @@ class HNSwitchClient: public Application
 
             options.addOption( Option("health", "c", "Request a component health report.").required(false).repeatable(false).callback(OptionCallback<HNSwitchClient>(this, &HNSwitchClient::handleOptions)));
 
-            options.addOption( Option("seqadd", "q", "Schedule a uniform manual switch sequence.").required(false).repeatable(false).callback(OptionCallback<HNSwitchClient>(this, &HNSwitchClient::handleOptions)));
+            options.addOption( Option("seqadd", "q", "Schedule a uniform manual switch sequence.").required(false).repeatable(false).argument("json-seq-file").callback(OptionCallback<HNSwitchClient>(this, &HNSwitchClient::handleOptions)));
         }
 	
         void handleHelp(const std::string& name, const std::string& value)
@@ -98,7 +109,10 @@ class HNSwitchClient: public Application
             else if( "health" == name )
                 _healthRequested = true;
             else if( "seqadd" == name )
+            {
                 _seqaddRequested = true;
+                _seqaddFilePath  = value;
+            }
 
         }
 
@@ -193,10 +207,49 @@ class HNSwitchClient: public Application
             }
             else if( _seqaddRequested == true )
             {
-                HNSWDPacketClient packet;
-                uint32_t length;
+                std::stringstream msg;
 
-                packet.setType( HNSWD_PTYPE_SEQ_ADD_REQ );
+                Poco::Path path( _seqaddFilePath );
+                Poco::File file( path );
+
+                if( file.exists() == false || file.isFile() == false )
+                {
+                    std::cerr << "ERROR: Sequence definition file does not exist: " << path.toString() << std::endl;
+                    return Application::EXIT_SOFTWARE;
+                }
+            
+                // Open a stream for reading
+                std::ifstream its;
+                its.open( path.toString() );
+
+                if( its.is_open() == false )
+                {
+                    std::cerr << "ERROR: Sequence definition file could not be opened: " << path.toString() << std::endl;
+                    return Application::EXIT_SOFTWARE;
+                }
+
+                // Invoke the json parser
+                try
+                {
+                    // Attempt to parse the json    
+                    pjs::Parser parser;
+                    pdy::Var varRoot = parser.parse( its );
+                    its.close();
+
+                    // Get a pointer to the root object
+                    pjs::Object::Ptr jsRoot = varRoot.extract< pjs::Object::Ptr >();
+
+                    // Write out the generated json
+                    pjs::Stringifier::stringify( jsRoot, msg );
+                }
+                catch( Poco::Exception ex )
+                {
+                    its.close();
+                    std::cerr << "ERROR: Sequence definition file json parsing failure: " << ex.displayText().c_str() << std::endl;
+                    return Application::EXIT_SOFTWARE;
+                }
+
+                HNSWDPacketClient packet( HNSWD_PTYPE_SEQ_ADD_REQ, HNSWD_RCODE_NOTSET, msg.str() );
 
                 std::cout << "Sending a Uniform Sequence Add request..." << std::endl;
 
@@ -235,39 +288,8 @@ class HNSwitchClient: public Application
                         std::string msg;
                         packet.getMsg( msg );
                         std::cout << "Daemon Status Recieved - result code: " << packet.getResult() << std::endl << msg << std::endl;
-#if 0
-                        char timeBuf[64];
-                        std::string health;
-                        struct timeval statusTime;
-                        struct timeval lastMeasurementTime;
-                        unsigned long measurementCount;
-                        std::string msg;
-                  
-                        // Decode the packet data.
-                        health = ( packet.getActionIndex() == 1 ) ? "OK" : "Degraded";
 
-                        statusTime.tv_sec  = packet.getParam( 0 );
-                        statusTime.tv_usec = packet.getParam( 1 );
 
-                        lastMeasurementTime.tv_sec  = packet.getParam( 2 );
-                        lastMeasurementTime.tv_usec = packet.getParam( 3 );
-
-                        measurementCount = packet.getParam( 4 );
-       
-                        msg.assign( (const char *)packet.getPayloadPtr(), packet.getPayloadLength() );
-
-                        // Output the status line
-                        std::cout << "Status: " << health;
-
-                        strftime( timeBuf, sizeof timeBuf, "%H:%M:%S", localtime( &(statusTime.tv_sec) ) );
-                        std::cout << "  CT: " << timeBuf;
-
-                        strftime( timeBuf, sizeof timeBuf, "%H:%M:%S", localtime( &(lastMeasurementTime.tv_sec) ) );
-                        std::cout << "  MT: " << timeBuf;
-                        std::cout << "  MC: " << measurementCount;
-                        std::cout << "  Msg: " << msg;
-                        std::cout << std::endl;
-#endif
                     }
                     break;
 

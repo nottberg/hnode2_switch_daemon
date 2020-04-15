@@ -98,6 +98,12 @@ HNSWDPacketDaemon::getResult()
     return (HNSWD_RCODE_T) pktHdr.resultCode;
 }
 
+uint 
+HNSWDPacketDaemon::getMsgLen()
+{
+    return pktHdr.msgLen;
+}
+
 void 
 HNSWDPacketDaemon::setMsg( std::string value )
 {
@@ -143,10 +149,25 @@ HNSWDPacketDaemon::rcvHeader( int sockfd )
 HNSWDP_RESULT_T 
 HNSWDPacketDaemon::rcvPayload( int sockfd )
 {
+    int bytesRX;
+
     if( pktHdr.msgLen == 0 )
         return HNSWDP_RESULT_SUCCESS;
 
-    int bytesRX = recv( sockfd, msgData.buffer(), pktHdr.msgLen, 0 );
+    while( 1 )
+    {
+        bytesRX = recv( sockfd, msgData.buffer(), pktHdr.msgLen, 0 );
+
+        if( bytesRX < 0 )
+        {
+            if( errno == EAGAIN )
+                continue;
+
+            return HNSWDP_RESULT_FAILURE;
+        }
+
+        break;
+    }
 
     if( bytesRX != pktHdr.msgLen )
     {
