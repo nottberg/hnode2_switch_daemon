@@ -234,7 +234,7 @@ class HNSwitchClient: public Application
                     {
                         std::string msg;
                         packet.getMsg( msg );
-                        std::cout << "Daemon Status Recieved: " << msg << std::endl;
+                        std::cout << "Daemon Status Recieved - result code: " << packet.getResult() << std::endl << msg << std::endl;
 #if 0
                         char timeBuf[64];
                         std::string health;
@@ -275,7 +275,7 @@ class HNSwitchClient: public Application
                     {
                         std::string msg;
                         packet.getMsg( msg );
-                        std::cout << "Component Health Response Recieved: " << msg << std::endl;
+                        std::cout << "Component Health Response Recieved - result code: " << packet.getResult() << std::endl << msg << std::endl;
                     }
                     break;
 
@@ -283,7 +283,7 @@ class HNSwitchClient: public Application
                     {
                         std::string msg;
                         packet.getMsg( msg );
-                        std::cout << "Uniform Sequence Response Recieved: " << msg << std::endl;
+                        std::cout << "Uniform Sequence Response Recieved - result code: " << packet.getResult() << std::endl << msg << std::endl;
                     }
                     break;
 

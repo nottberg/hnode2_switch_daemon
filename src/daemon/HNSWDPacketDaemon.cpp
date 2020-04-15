@@ -168,6 +168,9 @@ HNSWDPacketDaemon::sendAll( int sockfd )
         return HNSWDP_RESULT_FAILURE;
     }
 
+    if( pktHdr.msgLen == 0 )
+        return HNSWDP_RESULT_FAILURE;
+
     length = send( sockfd, msgData.buffer(), pktHdr.msgLen, MSG_NOSIGNAL );
 
     if( length != pktHdr.msgLen )

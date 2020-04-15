@@ -609,6 +609,8 @@ HNSequenceQueue::addUniformSequence( struct tm *time, std::string seqJSON, std::
     pjs::Parser parser;
     std::string empty;
 
+    errMsg.clear();
+
     // Parse the json
     try
     {
