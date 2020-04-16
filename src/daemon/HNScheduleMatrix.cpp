@@ -584,10 +584,11 @@ HNSequenceQueue::setDstLog( HNDaemonLog *logPtr )
     log.setDstLog( logPtr );
 }
 
-void 
-HNSequenceQueue::clearSequence()
+HNSM_RESULT_T 
+HNSequenceQueue::cancelSequences()
 {
     actionList.clear();
+    return HNSM_RESULT_SUCCESS;
 }
 
 #if 0

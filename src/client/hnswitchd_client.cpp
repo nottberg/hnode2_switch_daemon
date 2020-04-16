@@ -33,13 +33,14 @@ namespace pdy = Poco::Dynamic;
 class HNSwitchClient: public Application
 {
     private:
-        bool _helpRequested    = false;
-        bool _resetRequested   = false;
-        bool _monitorRequested = false;
-        bool _statusRequested  = false;
-        bool _healthRequested  = false;
-        bool _seqaddRequested  = false;
-        bool _swinfoRequested  = false;
+        bool _helpRequested      = false;
+        bool _resetRequested     = false;
+        bool _monitorRequested   = false;
+        bool _statusRequested    = false;
+        bool _healthRequested    = false;
+        bool _seqaddRequested    = false;
+        bool _swinfoRequested    = false;
+        bool _seqcancelRequested = false;
 
         std::string _seqaddFilePath;
 
@@ -87,7 +88,9 @@ class HNSwitchClient: public Application
 
             options.addOption( Option("switch", "i", "Request information about managed switches.").required(false).repeatable(false).callback(OptionCallback<HNSwitchClient>(this, &HNSwitchClient::handleOptions)));
 
-            options.addOption( Option("seqadd", "q", "Schedule a uniform manual switch sequence.").required(false).repeatable(false).argument("json-seq-file").callback(OptionCallback<HNSwitchClient>(this, &HNSwitchClient::handleOptions)));
+            options.addOption( Option("seqadd", "q", "Add a uniform manual switch sequence.").required(false).repeatable(false).argument("json-seq-file").callback(OptionCallback<HNSwitchClient>(this, &HNSwitchClient::handleOptions)));
+
+            options.addOption( Option("seqcancel", "x", "Cancel any previously added switch sequences.").required(false).repeatable(false).callback(OptionCallback<HNSwitchClient>(this, &HNSwitchClient::handleOptions)));
         }
 	
         void handleHelp(const std::string& name, const std::string& value)
@@ -114,6 +117,8 @@ class HNSwitchClient: public Application
             }
             else if( "switch" == name )
                 _swinfoRequested = true;
+            else if( "seqcancel" == name )
+                _seqcancelRequested = true;
 
         }
 
@@ -260,9 +265,19 @@ class HNSwitchClient: public Application
                     return Application::EXIT_SOFTWARE;
                 }
 
-                HNSWDPacketClient packet( HNSWD_PTYPE_SEQ_ADD_REQ, HNSWD_RCODE_NOTSET, msg.str() );
+                HNSWDPacketClient packet( HNSWD_PTYPE_USEQ_ADD_REQ, HNSWD_RCODE_NOTSET, msg.str() );
 
                 std::cout << "Sending a Uniform Sequence Add request..." << std::endl;
+
+                packet.sendAll( sockfd );
+            }
+            else if( _seqcancelRequested == true )
+            {
+                HNSWDPacketClient packet;
+
+                packet.setType( HNSWD_PTYPE_SEQ_CANCEL_REQ );
+
+                std::cout << "Sending a SEQUENCE CANCEL request..." << std::endl;
 
                 packet.sendAll( sockfd );
             }
@@ -447,14 +462,27 @@ class HNSwitchClient: public Application
                     }
                     break;
 
-                    case HNSWD_PTYPE_SEQ_RSP:
+                    case HNSWD_PTYPE_USEQ_ADD_RSP:
                     {
                         std::string msg;
                         packet.getMsg( msg );
-                        std::cout << "=== Uniform Sequence Response Recieved - result code: " << packet.getResult() << " ===" << std::endl;
+                        std::cout << "=== Uniform Sequence Add Response Recieved - result code: " << packet.getResult() << " ===" << std::endl;
 
                         // Exit if we received the expected response and monitoring wasn't requested.
                         if( (_seqaddRequested == true) && (_monitorRequested == false ) )
+                            quit = true;
+
+                    }
+                    break;
+
+                    case HNSWD_PTYPE_SEQ_CANCEL_RSP:
+                    {
+                        std::string msg;
+                        packet.getMsg( msg );
+                        std::cout << "=== Sequence Cancel Response Recieved - result code: " << packet.getResult() << " ===" << std::endl;
+
+                        // Exit if we received the expected response and monitoring wasn't requested.
+                        if( (_seqcancelRequested == true) && (_monitorRequested == false ) )
                             quit = true;
 
                     }

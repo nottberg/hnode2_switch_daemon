@@ -170,7 +170,7 @@ class HNSequenceQueue
 
         bool hasActions();
 
-        void clearSequence();
+        HNSM_RESULT_T cancelSequences();
 
         HNSM_RESULT_T addUniformSequence( struct tm *time, std::string seqJSON, std::string &errMsg );
 

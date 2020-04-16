@@ -15,9 +15,10 @@ typedef enum HNodeSWDPacketTypeEnum
     HNSWD_PTYPE_RESET_RSP,
     HNSWD_PTYPE_HEALTH_REQ,     // Request detailed component health
     HNSWD_PTYPE_HEALTH_RSP,     
-    HNSWD_PTYPE_SEQ_ADD_REQ,    // Add a one time sequence of switch actions.
+    HNSWD_PTYPE_USEQ_ADD_REQ,    // Add a one time sequence of switch actions.
+    HNSWD_PTYPE_USEQ_ADD_RSP,
     HNSWD_PTYPE_SEQ_CANCEL_REQ, // Cancel all future sequence actions.
-    HNSWD_PTYPE_SEQ_RSP,
+    HNSWD_PTYPE_SEQ_CANCEL_RSP,
     HNSWD_PTYPE_SCH_CTRL_REQ,   // Control scheduling behavior. Enable/Disable, etc.
     HNSWD_PTYPE_SCH_CTRL_RSP,
     HNSWD_PTYPE_SWINFO_REQ,     // Request info about managed switches.

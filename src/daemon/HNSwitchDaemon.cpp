@@ -519,7 +519,7 @@ HNSwitchDaemon::processClientRequest( int cfd )
         break;
 
         // Request a manual sequence of switch activity.
-        case HNSWD_PTYPE_SEQ_ADD_REQ:
+        case HNSWD_PTYPE_USEQ_ADD_REQ:
         {
             HNSM_RESULT_T result;
             std::string msg;
@@ -527,7 +527,7 @@ HNSwitchDaemon::processClientRequest( int cfd )
             struct tm newtime;
             time_t ltime;
  
-            log.info( "Uniform sequence add from client: %d", cfd );
+            log.info( "Uniform sequence add request from client: %d", cfd );
 
             // Get the current time 
             ltime = time( &ltime );
@@ -540,7 +540,7 @@ HNSwitchDaemon::processClientRequest( int cfd )
             if( result != HNSM_RESULT_SUCCESS )
             {
                 // Create the packet.
-                HNSWDPacketDaemon packet( HNSWD_PTYPE_SEQ_RSP, HNSWD_RCODE_FAILURE, error );
+                HNSWDPacketDaemon packet( HNSWD_PTYPE_USEQ_ADD_RSP, HNSWD_RCODE_FAILURE, error );
 
                 // Send packet to requesting client
                 packet.sendAll( cfd );
@@ -551,7 +551,7 @@ HNSwitchDaemon::processClientRequest( int cfd )
             seqQueue.debugPrint();
 
             // Create the packet.
-            HNSWDPacketDaemon packet( HNSWD_PTYPE_SEQ_RSP, HNSWD_RCODE_SUCCESS, error );
+            HNSWDPacketDaemon packet( HNSWD_PTYPE_USEQ_ADD_RSP, HNSWD_RCODE_SUCCESS, error );
 
             // Send packet to requesting client
             packet.sendAll( cfd );
@@ -559,6 +559,35 @@ HNSwitchDaemon::processClientRequest( int cfd )
         break;
 
         case HNSWD_PTYPE_SEQ_CANCEL_REQ:
+        {
+            std::string msg;
+            HNSM_RESULT_T result;
+ 
+            log.info( "Cancel sequence request from client: %d", cfd );
+
+            result = seqQueue.cancelSequences();
+            
+            if( result != HNSM_RESULT_SUCCESS )
+            {
+                std::string error;
+
+                // Create the packet.
+                HNSWDPacketDaemon packet( HNSWD_PTYPE_SEQ_CANCEL_RSP, HNSWD_RCODE_FAILURE, error );
+
+                // Send packet to requesting client
+                packet.sendAll( cfd );
+
+                return HNSD_RESULT_SUCCESS;
+            }
+            
+            seqQueue.debugPrint();
+
+            // Create the packet.
+            HNSWDPacketDaemon packet( HNSWD_PTYPE_SEQ_CANCEL_RSP, HNSWD_RCODE_SUCCESS, msg );
+
+            // Send packet to requesting client
+            packet.sendAll( cfd );
+        }
         break;
 
         case HNSWD_PTYPE_SWINFO_REQ:
