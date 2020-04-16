@@ -92,11 +92,11 @@ class HNSwitchClient: public Application
 
             options.addOption( Option("switch", "i", "Request information about managed switches.").required(false).repeatable(false).callback(OptionCallback<HNSwitchClient>(this, &HNSwitchClient::handleOptions)));
 
-            options.addOption( Option("seqadd", "q", "Add a uniform manual switch sequence.").required(false).repeatable(false).argument("json-seq-file").callback(OptionCallback<HNSwitchClient>(this, &HNSwitchClient::handleOptions)));
+            options.addOption( Option("seqadd", "q", "Add a uniform manual switch sequence.  Sequence is defined in provided json file.").required(false).repeatable(false).argument("seqfile").callback(OptionCallback<HNSwitchClient>(this, &HNSwitchClient::handleOptions)));
 
             options.addOption( Option("seqcancel", "x", "Cancel any previously added switch sequences.").required(false).repeatable(false).callback(OptionCallback<HNSwitchClient>(this, &HNSwitchClient::handleOptions)));
 
-            options.addOption( Option("schstate", "e", "Change the scheduler state.").required(false).repeatable(false).argument("enabled|disabled|inhibit").callback(OptionCallback<HNSwitchClient>(this, &HNSwitchClient::handleOptions)));
+            options.addOption( Option("schstate", "e", "Change the scheduler state. Possible states: enabled|disabled|inhibit. For inhibit the duration parameter is also required.").required(false).repeatable(false).argument("newstate").callback(OptionCallback<HNSwitchClient>(this, &HNSwitchClient::handleOptions)));
 
             options.addOption( Option("duration", "d", "Duration in HH:MM:SS format.").required(false).repeatable(false).argument("00:00:00").callback(OptionCallback<HNSwitchClient>(this, &HNSwitchClient::handleOptions)));
 
