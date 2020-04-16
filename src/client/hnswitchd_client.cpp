@@ -39,6 +39,7 @@ class HNSwitchClient: public Application
         bool _statusRequested  = false;
         bool _healthRequested  = false;
         bool _seqaddRequested  = false;
+        bool _swinfoRequested  = false;
 
         std::string _seqaddFilePath;
 
@@ -76,10 +77,6 @@ class HNSwitchClient: public Application
 
 		    options.addOption( Option("help", "h", "display help information on command line arguments").required(false).repeatable(false).callback(OptionCallback<HNSwitchClient>(this, &HNSwitchClient::handleHelp)));
 
-		    //options.addOption( Option("define", "D", "define a configuration property").required(false).repeatable(true).argument("name=value").callback(OptionCallback<SampleApp>(this, &SampleApp::handleDefine)));
-				
-		    //options.addOption( Option("config-file", "f", "load configuration data from a file").required(false).repeatable(true).argument("file").callback(OptionCallback<SampleApp>(this, &SampleApp::handleConfig)));
-
             options.addOption( Option("status", "s", "Make an explicit request for a status packet from the deamon.").required(false).repeatable(false).callback(OptionCallback<HNSwitchClient>(this, &HNSwitchClient::handleOptions)));
 
             options.addOption( Option("reset", "r", "Reset the daemon, including a re-read of its configuration.").required(false).repeatable(false).callback(OptionCallback<HNSwitchClient>(this, &HNSwitchClient::handleOptions)));
@@ -87,6 +84,8 @@ class HNSwitchClient: public Application
             options.addOption( Option("monitor", "m", "Leave the connection to the daemon open to monitor for asynch events.").required(false).repeatable(false).callback(OptionCallback<HNSwitchClient>(this, &HNSwitchClient::handleOptions)));
 
             options.addOption( Option("health", "c", "Request a component health report.").required(false).repeatable(false).callback(OptionCallback<HNSwitchClient>(this, &HNSwitchClient::handleOptions)));
+
+            options.addOption( Option("switch", "i", "Request information about managed switches.").required(false).repeatable(false).callback(OptionCallback<HNSwitchClient>(this, &HNSwitchClient::handleOptions)));
 
             options.addOption( Option("seqadd", "q", "Schedule a uniform manual switch sequence.").required(false).repeatable(false).argument("json-seq-file").callback(OptionCallback<HNSwitchClient>(this, &HNSwitchClient::handleOptions)));
         }
@@ -113,6 +112,8 @@ class HNSwitchClient: public Application
                 _seqaddRequested = true;
                 _seqaddFilePath  = value;
             }
+            else if( "switch" == name )
+                _swinfoRequested = true;
 
         }
 
@@ -146,7 +147,7 @@ class HNSwitchClient: public Application
             if( connect( sockfd, (struct sockaddr *) &addr, ( sizeof( sa_family_t ) + strlen( str ) + 1 ) ) == 0 )
             {
                 // Success
-                printf( "openClientSocket success - fd: %d\n", sockfd );
+                printf( "Successfully opened client socket on file descriptor: %d\n", sockfd );
                 return false;
             }
 
@@ -205,6 +206,16 @@ class HNSwitchClient: public Application
 
                 packet.sendAll( sockfd );
             }
+            else if( _swinfoRequested == true )
+            {
+                HNSWDPacketClient packet;
+
+                packet.setType( HNSWD_PTYPE_SWINFO_REQ );
+
+                std::cout << "Sending a SWITCH INFO request..." << std::endl;
+
+                packet.sendAll( sockfd );
+            }
             else if( _seqaddRequested == true )
             {
                 std::stringstream msg;
@@ -260,9 +271,8 @@ class HNSwitchClient: public Application
             bool quit = false;
             while( quit == false )
             {
-                HNSWDPacketClient    packet;
-                //HNodeSensorMeasurement reading;
-                HNSWDP_RESULT_T result;
+                HNSWDPacketClient packet;
+                HNSWDP_RESULT_T   result;
 
                 printf( "Waiting for packet reception...\n" );
 
@@ -322,6 +332,10 @@ class HNSwitchClient: public Application
                         {
                             std::cout << "  ERROR: Response message not parsable: " << msg << std::endl;
                         }
+
+                        // Exit if we received the expected response and monitoring wasn't requested.
+                        if( _monitorRequested == false )
+                            quit = true;
                     }
                     break;
 
@@ -383,11 +397,66 @@ class HNSwitchClient: public Application
                     }
                     break;
 
+                    case HNSWD_PTYPE_SWINFO_RSP:
+                    {
+                        std::string msg;
+
+                        // Get the json response string.
+                        packet.getMsg( msg );
+                        std::cout << "=== Switch Info Response Recieved - result code: " << packet.getResult() << " ===" << std::endl;
+
+                        // Parse and format the response
+                        try
+                        {
+                            std::string empty;
+                            pjs::Parser parser;
+
+                            // Attempt to parse the json
+                            pdy::Var varRoot = parser.parse( msg );
+
+                            // Get a pointer to the root object
+                            pjs::Object::Ptr jsRoot = varRoot.extract< pjs::Object::Ptr >();
+
+                            pjs::Array::Ptr jsSWList = jsRoot->getArray( "swList" );
+
+                            printf( "  swid                |   Description  \n" );
+                            printf( "  -------------------------------------\n" );
+
+                            for( uint index = 0; index < jsSWList->size(); index++ )
+                            {
+                                if( jsSWList->isObject( index ) == false )
+                                    continue;
+                                
+                                pjs::Object::Ptr jsSWInfo = jsSWList->getObject( index );
+
+                                std::string swid = jsSWInfo->optValue( "swid", empty );
+                                std::string desc = jsSWInfo->optValue( "description", empty );
+
+                                printf( "  %-20.20s %s\n", swid.c_str(), desc.c_str() );
+                            }
+                        }
+                        catch( Poco::Exception ex )
+                        {
+                            std::cout << "  ERROR: Response message not parsable: " << msg << std::endl;
+                        }
+
+                        // Exit if we received the expected response and monitoring wasn't requested.
+                        if( (_swinfoRequested == true) && (_monitorRequested == false ) )
+                            quit = true;
+
+                    }
+                    break;
+
                     case HNSWD_PTYPE_SEQ_RSP:
                     {
                         std::string msg;
                         packet.getMsg( msg );
-                        std::cout << "Uniform Sequence Response Recieved - result code: " << packet.getResult() << std::endl << msg << std::endl;
+                        std::cout << "=== Uniform Sequence Response Recieved - result code: " << packet.getResult() << " ===" << std::endl;
+
+                        // Exit if we received the expected response and monitoring wasn't requested.
+                        if( (_seqaddRequested == true) && (_monitorRequested == false ) )
+                            quit = true;
+
                     }
                     break;
 

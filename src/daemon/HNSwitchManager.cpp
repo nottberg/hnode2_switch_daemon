@@ -824,6 +824,55 @@ HNSwitchManager::loadConfiguration( std::string devname, std::string instance )
 }
 
 HNSW_RESULT_T 
+HNSwitchManager::getSwitchInfo( std::string &jsonMsg )
+{
+    std::stringstream msgStream;
+
+    jsonMsg.clear();
+
+    char tmpBuf[128];
+
+    // Create a json root object
+    pjs::Object jsRoot;
+
+    // Create an array of switch info
+    pjs::Array jsSWList;
+
+    // Add a switch info object to the array for each switch
+    for( std::map< std::string, HNSWSwitch >::iterator it = switchMap.begin(); it != switchMap.end(); it++ )
+    {
+        // Add overall health to output.
+        pjs::Object jsSWInfo;
+
+        jsSWInfo.set( "swid", it->second.getSWID() );
+        jsSWInfo.set( "description", it->second.getDesc() );
+
+        jsSWList.add( jsSWInfo );
+    }
+
+    // Add switch info array to the root object
+    jsRoot.set( "swList", jsSWList );
+
+    // Render into a json string.
+    try
+    {
+        // Write out the generated json
+        pjs::Stringifier::stringify( jsRoot, msgStream );
+    }
+    catch( ... )
+    {
+        // Something went wrong
+        return HNSW_RESULT_FAILURE;
+    }
+
+    // Return to the caller.
+    jsonMsg = msgStream.str();
+
+    // Success
+    return HNSW_RESULT_SUCCESS;
+}
+
+HNSW_RESULT_T 
 HNSwitchManager::initDevices()
 {
     HNSW_RESULT_T lastResult = HNSW_RESULT_SUCCESS;
@@ -922,37 +971,6 @@ HNSwitchManager::getHealthComponent( uint index )
     }
 
     return NULL;
-}
-
-unsigned int 
-HNSwitchManager::getSwitchCount()
-{
-    return switchMap.size();
-}
-
-HNSWSwitch *
-HNSwitchManager::getSwitchByIndex( int index )
-{
-    uint i = 0;
-    for( std::map< std::string, HNSWSwitch >::iterator it = switchMap.begin(); it != switchMap.end(); it++ )
-    {
-        if( i == index )
-            return &(it->second);
-        i++;
-    }
-
-    return NULL;
-}
-
-HNSWSwitch *
-HNSwitchManager::getSwitchByID( std::string switchID )
-{
-    std::map< std::string, HNSWSwitch >::iterator it = switchMap.find( switchID );
-
-    if( it == switchMap.end() )
-        return NULL;
-
-    return &(it->second);
 }
 
 void

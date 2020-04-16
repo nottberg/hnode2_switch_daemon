@@ -186,9 +186,7 @@ class HNSwitchManager : public HNDHConsumerInterface
         HNSW_RESULT_T initDevices();
         HNSW_RESULT_T closeDevices();
 
-        unsigned int getSwitchCount();
-        HNSWSwitch* getSwitchByIndex( int index );
-        HNSWSwitch* getSwitchByID( std::string swid );
+        HNSW_RESULT_T getSwitchInfo( std::string &jsonMsg );
 
         HNSW_RESULT_T processOnState( std::vector< std::string > &swidOnList );
 

@@ -19,7 +19,10 @@ typedef enum HNodeSWDPacketTypeEnum
     HNSWD_PTYPE_SEQ_CANCEL_REQ, // Cancel all future sequence actions.
     HNSWD_PTYPE_SEQ_RSP,
     HNSWD_PTYPE_SCH_CTRL_REQ,   // Control scheduling behavior. Enable/Disable, etc.
-    HNSWD_PTYPE_SCH_CTRL_RSP
+    HNSWD_PTYPE_SCH_CTRL_RSP,
+    HNSWD_PTYPE_SWINFO_REQ,     // Request info about managed switches.
+    HNSWD_PTYPE_SWINFO_RSP
+
 }HNSWD_PTYPE_T;
 
 typedef enum HNodeSWDPacketResultCodeEnum

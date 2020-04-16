@@ -527,6 +527,8 @@ HNSwitchDaemon::processClientRequest( int cfd )
             struct tm newtime;
             time_t ltime;
  
+            log.info( "Uniform sequence add from client: %d", cfd );
+
             // Get the current time 
             ltime = time( &ltime );
             localtime_r( &ltime, &newtime );
@@ -557,6 +559,13 @@ HNSwitchDaemon::processClientRequest( int cfd )
         break;
 
         case HNSWD_PTYPE_SEQ_CANCEL_REQ:
+        break;
+
+        case HNSWD_PTYPE_SWINFO_REQ:
+        {
+            log.info( "Switch Info request from client: %d", cfd );
+            sendSwitchInfoPacket( cfd );
+        }
         break;
 
         // Unknown packet
@@ -735,81 +744,35 @@ HNSwitchDaemon::sendComponentHealthPacket( int clientFD )
     packet.sendAll( clientFD );
 }
 
-
-#if 0
 void 
-HNSwitchDaemon::sendSwitchInfo()
+HNSwitchDaemon::sendSwitchInfoPacket( int clientFD )
 {
-    packet.setActionIndex( healthOK );
+    HNSW_RESULT_T result;
+    std::string   msg;
 
-    packet.setParam( 0, curTS->tv_sec );
-    packet.setParam( 1, curTS->tv_usec );
+    // Generate the switch info message
+    result = switchMgr.getSwitchInfo( msg );
 
-    swCount = switchMgr.getSwitchCount();
-
-    packet.setParam( 2, 0); // switchMgr.getActionCount() );
-    packet.setParam( 3, curErrMsg.size() );
-
-    packet.setParam( 4, swCount );
-
-    for( index = 0; index < swCount; index++ )
+    // Check on result
+    if( result != HNSW_RESULT_SUCCESS )
     {
-        HNSWSwitch *swObj = switchMgr.getSwitchByIndex( index );
+        std::string errMsg;
 
-        //syslog( LOG_INFO, "Switch %d - address: %s\n", index, swObj->getAddress().c_str() );
-        //syslog( LOG_INFO, "Switch %d - id: %s\n", index, swObj->getID().c_str() );
-        //syslog( LOG_INFO, "Switch %d - name: %s\n", index, swObj->getName().c_str() );
-        //syslog( LOG_INFO, "Switch %d - desc: %s\n", index, swObj->getDescription().c_str() );
-        //syslog( LOG_INFO, "Switch %d - mapped: %d\n", index, swObj->isMapped() );
-        //syslog( LOG_INFO, "Switch %d - controlled: %d\n", index, swObj->isControlled() );
-        //syslog( LOG_INFO, "Switch %d - Cap on/off: %d\n", index, swObj->hasCapOnOff() );
-        //syslog( LOG_INFO, "Switch %d - State: %d\n", index, swObj->isStateOn() );
+        // Create the error packet.
+        HNSWDPacketDaemon packet( HNSWD_PTYPE_SWINFO_RSP, HNSWD_RCODE_FAILURE, errMsg );
 
-        //std::string getID();
-        //std::string getName();
-        //std::string getDescription();
-        //bool isMapped();
-        //bool isControlled();
-        //bool hasCapOnOff();
-        //bool isStateOn();
+        // Send packet to requesting client
+        packet.sendAll( clientFD );
+
+        return;
     }
 
-    packet.setPayloadLength( curErrMsg.size() );
-    memcpy( packet.getPayloadPtr(), curErrMsg.c_str(), curErrMsg.size() );
+    // Create the success packet.
+    HNSWDPacketDaemon packet( HNSWD_PTYPE_SWINFO_RSP, HNSWD_RCODE_SUCCESS, msg );
 
-    for( std::map< int, ClientRecord >::iterator it = clientMap.begin(); it != clientMap.end(); it++ )
-    {
-        length = send( it->first, packet.getPacketPtr(), packet.getPacketLength(), MSG_NOSIGNAL );         
-    }
+    // Send packet to requesting client
+    packet.sendAll( clientFD );
 }
-#endif
-
-#if 0
-void 
-DaemonProcess::notifyNewMeasurement( uint32_t sensorIndex, HNodeSensorMeasurement &reading )
-{
-    HNodeSWDPacket packet;
-    uint32_t length;
-
-    gettimeofday( &lastReadingTS, NULL );
-
-    packet.setType( HNSEPP_TYPE_HNS_MEASUREMENT );
-
-    reading.buildPacketData( packet.getPayloadPtr(), length );
-
-    packet.setPayloadLength( length );
-    packet.setSensorIndex( sensorIndex );
-
-    for( std::map< int, ClientRecord >::iterator it = clientMap.begin(); it != clientMap.end(); it++ )
-    {
-        length = send( it->first, packet.getPacketPtr(), packet.getPacketLength(), MSG_NOSIGNAL );         
-    }
-
-    // Since we recieved a measurement
-    // things must be working.
-    signalRunning();
-}
-#endif
 
 void 
 HNSwitchDaemon::signalError( std::string errMsg )
@@ -840,28 +803,6 @@ HNSwitchDaemon::signalRunning()
     }
 #endif
 }
-
-
-#if 0
-DaemonProcess::DaemonProcess()
-{
-    quit = false;
-
-    sendStatus = false;
-
-    healthOK   = false;
-
-    curErrMsg.empty();
-
-    lastReadingTS.tv_sec  = 0;
-    lastReadingTS.tv_usec = 0;
-}
-
-DaemonProcess::~DaemonProcess()
-{
-
-}
-#endif
 
 ClientRecord::ClientRecord()
 {
