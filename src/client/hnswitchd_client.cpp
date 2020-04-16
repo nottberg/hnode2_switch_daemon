@@ -41,8 +41,12 @@ class HNSwitchClient: public Application
         bool _seqaddRequested    = false;
         bool _swinfoRequested    = false;
         bool _seqcancelRequested = false;
-
+        bool _schstateRequested  = false;
+        bool _durationPresent    = false;
+        
         std::string _seqaddFilePath;
+        std::string _schstateNewState;
+        std::string _durationStr;
 
     public:
 	    HNSwitchClient()
@@ -91,6 +95,11 @@ class HNSwitchClient: public Application
             options.addOption( Option("seqadd", "q", "Add a uniform manual switch sequence.").required(false).repeatable(false).argument("json-seq-file").callback(OptionCallback<HNSwitchClient>(this, &HNSwitchClient::handleOptions)));
 
             options.addOption( Option("seqcancel", "x", "Cancel any previously added switch sequences.").required(false).repeatable(false).callback(OptionCallback<HNSwitchClient>(this, &HNSwitchClient::handleOptions)));
+
+            options.addOption( Option("schstate", "e", "Change the scheduler state.").required(false).repeatable(false).argument("enabled|disabled|inhibit").callback(OptionCallback<HNSwitchClient>(this, &HNSwitchClient::handleOptions)));
+
+            options.addOption( Option("duration", "d", "Duration in HH:MM:SS format.").required(false).repeatable(false).argument("00:00:00").callback(OptionCallback<HNSwitchClient>(this, &HNSwitchClient::handleOptions)));
+
         }
 	
         void handleHelp(const std::string& name, const std::string& value)
@@ -119,7 +128,16 @@ class HNSwitchClient: public Application
                 _swinfoRequested = true;
             else if( "seqcancel" == name )
                 _seqcancelRequested = true;
-
+            else if( "schstate" == name )
+            {
+                _schstateRequested = true;
+                _schstateNewState  = value;
+            }
+            else if( "duration" == name )
+            {
+                _durationPresent = true;
+                _durationStr     = value;
+            }
         }
 
         void displayHelp()
@@ -278,6 +296,42 @@ class HNSwitchClient: public Application
                 packet.setType( HNSWD_PTYPE_SEQ_CANCEL_REQ );
 
                 std::cout << "Sending a SEQUENCE CANCEL request..." << std::endl;
+
+                packet.sendAll( sockfd );
+            }
+            else if( _schstateRequested == true )
+            {
+                std::stringstream msg;
+
+                // Error check the provided parameters
+
+                // Build the payload message
+                // Create a json root object
+                pjs::Object jsRoot;
+
+                // Add the timezone setting
+                jsRoot.set( "state", _schstateNewState );
+
+                // Add the current date
+                if( _durationPresent )
+                    jsRoot.set( "inhibitDuration", _durationStr );
+                else
+                    jsRoot.set( "inhibitDuration", "00:00:00" );
+
+                // Render into a json string.
+                try
+                {
+                    pjs::Stringifier::stringify( jsRoot, msg );
+                }
+                catch( ... )
+                {
+                    return Application::EXIT_SOFTWARE;
+                }
+
+                // Build the request packet.
+                HNSWDPacketClient packet( HNSWD_PTYPE_SCH_STATE_REQ, HNSWD_RCODE_NOTSET, msg.str() );
+
+                std::cout << "Sending a SCHEDULING STATE request..." << std::endl;
 
                 packet.sendAll( sockfd );
             }
@@ -488,6 +542,19 @@ class HNSwitchClient: public Application
 
                         // Exit if we received the expected response and monitoring wasn't requested.
                         if( (_seqcancelRequested == true) && (_monitorRequested == false ) )
+                            quit = true;
+
+                    }
+                    break;
+
+                    case HNSWD_PTYPE_SCH_STATE_RSP:
+                    {
+                        std::string msg;
+                        packet.getMsg( msg );
+                        std::cout << "=== Schedule State Response Recieved - result code: " << packet.getResult() << " ===" << std::endl;
+
+                        // Exit if we received the expected response and monitoring wasn't requested.
+                        if( (_schstateRequested == true) && (_monitorRequested == false ) )
                             quit = true;
 
                     }
