@@ -257,7 +257,8 @@ class HNSwitchClient: public Application
             }
 
             // Listen for packets
-            while( 1 )
+            bool quit = false;
+            while( quit == false )
             {
                 HNSWDPacketClient    packet;
                 //HNodeSensorMeasurement reading;
@@ -327,8 +328,58 @@ class HNSwitchClient: public Application
                     case HNSWD_PTYPE_HEALTH_RSP:
                     {
                         std::string msg;
+
+                        // Get the json response string.
                         packet.getMsg( msg );
-                        std::cout << "Component Health Response Recieved - result code: " << packet.getResult() << std::endl << msg << std::endl;
+                        std::cout << "=== Component Health Response Recieved - result code: " << packet.getResult() << " ===" << std::endl;
+
+                        // Parse and format the response
+                        try
+                        {
+                            std::string empty;
+                            pjs::Parser parser;
+
+                            // Attempt to parse the json
+                            pdy::Var varRoot = parser.parse( msg );
+
+                            // Get a pointer to the root object
+                            pjs::Object::Ptr jsRoot = varRoot.extract< pjs::Object::Ptr >();
+
+                            pjs::Object::Ptr jsOHealth = jsRoot->getObject( "overallHealth" );
+                            
+                            std::string ohstat = jsOHealth->optValue( "status", empty );
+                            std::string ohmsg = jsOHealth->optValue( "msg", empty ); 
+
+                            printf( "  Component                    |   Status   |   (Error Code) Message\n" );
+                            printf( "  ------------------------------------------------------------------\n" );
+                            printf( "  %-29.29s %-12.12s (%s) %s\n", "overall", ohstat.c_str(), "0", ohmsg.c_str() );
+
+                            pjs::Array::Ptr jsCHealth = jsRoot->getArray( "componentHealth" );
+
+                            for( uint index = 0; index < jsCHealth->size(); index++ )
+                            {
+                                if( jsCHealth->isObject( index ) == false )
+                                    continue;
+                                
+                                pjs::Object::Ptr jsCHObject = jsCHealth->getObject( index );
+
+                                std::string component = jsCHObject->optValue( "component", empty );
+                                std::string status    = jsCHObject->optValue( "status", empty );
+                                std::string errCode   = jsCHObject->optValue( "errCode", empty );
+                                std::string msg       = jsCHObject->optValue( "msg", empty );
+
+                                printf( "  %-29.29s %-12.12s (%s) %s\n", component.c_str(), status.c_str(), errCode.c_str(), msg.c_str() );
+                            }
+                        }
+                        catch( Poco::Exception ex )
+                        {
+                            std::cout << "  ERROR: Response message not parsable: " << msg << std::endl;
+                        }
+
+                        // Exit if we received the expected response and monitoring wasn't requested.
+                        if( (_healthRequested == true) && (_monitorRequested == false ) )
+                            quit = true;
+
                     }
                     break;
 

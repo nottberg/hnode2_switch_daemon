@@ -170,8 +170,6 @@ HNSWDPacketClient::sendAll( int sockfd )
 
     length = send( sockfd, &pktHdr, sizeof( pktHdr ), MSG_NOSIGNAL );
 
-    printf( "Send1: %d\n", length );
-
     if( length != sizeof( pktHdr ) )
     {
         return HNSWDP_RESULT_FAILURE;
@@ -181,8 +179,6 @@ HNSWDPacketClient::sendAll( int sockfd )
         return HNSWDP_RESULT_SUCCESS;
 
     length = send( sockfd, msgData.buffer(), pktHdr.msgLen, MSG_NOSIGNAL );
-
-    printf( "Send2: %d\n", length );
 
     if( length != pktHdr.msgLen )
     {
