@@ -293,6 +293,8 @@ HNScheduleMatrix::HNScheduleMatrix()
     {
         dayArr[i].setID( (HNS_DAY_INDX_T) i, scDayNames[i] );
     }
+
+    state = HNSM_SCHSTATE_ENABLED;
 }
 
 HNScheduleMatrix::~HNScheduleMatrix()
@@ -523,6 +525,75 @@ HNScheduleMatrix::loadSchedule( std::string devname, std::string instance )
 
     // Done
     return HNSM_RESULT_SUCCESS;
+}
+
+HNSM_SCHSTATE_T 
+HNScheduleMatrix::getState()
+{
+    return state;
+}
+
+std::string
+HNScheduleMatrix::getStateStr()
+{
+    switch( state )
+    {
+        case HNSM_SCHSTATE_ENABLED:
+            return "enabled";
+        case HNSM_SCHSTATE_DISABLED:
+            return "disabled";
+        case HNSM_SCHSTATE_INHIBIT:
+            return "inhibit";
+    }
+
+    return "notset";
+}
+
+void 
+HNScheduleMatrix::setStateDisabled()
+{
+    state = HNSM_SCHSTATE_DISABLED;
+}
+
+void 
+HNScheduleMatrix::setStateEnabled()
+{
+    state = HNSM_SCHSTATE_ENABLED;
+}
+
+void 
+HNScheduleMatrix::setStateInhibited( struct tm *time, std::string durationStr )
+{
+    HNS24HTime duration;
+
+    state = HNSM_SCHSTATE_INHIBIT;
+
+    duration.parseTime( durationStr.c_str() );
+
+    inhibitUntil.setFromHMS( time->tm_hour, time->tm_min, time->tm_sec );
+    inhibitUntil.addDuration( duration );
+}
+
+std::string
+HNScheduleMatrix::getInhibitUntilStr()
+{
+    if( state != HNSM_SCHSTATE_INHIBIT )
+        return "00:00:00";
+
+    return inhibitUntil.getHMSStr();
+}
+
+bool 
+HNScheduleMatrix::checkInhibitExpire( struct tm *time )
+{
+    HNS24HTime curTime;
+
+    curTime.setFromHMS(  time->tm_hour, time->tm_min, time->tm_sec );
+
+    if( inhibitUntil.getSeconds() <= curTime.getSeconds() )
+        return true;
+
+    return false;
 }
 
 uint 

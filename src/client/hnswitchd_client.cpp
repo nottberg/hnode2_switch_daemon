@@ -332,14 +332,19 @@ class HNSwitchClient: public Application
                             std::string tz   = jsRoot->optValue( "timezone", empty );
                             std::string swON = jsRoot->optValue( "swOnList", empty );
 
+                            std::string schState = jsRoot->optValue( "schedulerState", empty );
+                            std::string inhUntil = jsRoot->optValue( "inhibitUntil", empty );
+
                             pjs::Object::Ptr jsOHealth = jsRoot->getObject( "overallHealth" );
                             
                             std::string ohstat = jsOHealth->optValue( "status", empty );
                             std::string ohmsg = jsOHealth->optValue( "msg", empty ); 
 
-                            printf( "       date: %s\n", date.c_str() );
-                            printf( "       time: %s\n", time.c_str() );
-                            printf( "   timezone: %s\n", tz.c_str() );
+                            printf( "       Date: %s\n", date.c_str() );
+                            printf( "       Time: %s\n", time.c_str() );
+                            printf( "   Timezone: %s\n\n", tz.c_str() );
+                            printf( "   Schduler State: %s\n", schState.c_str() );
+                            printf( "    Inhibit Until: %s\n\n", inhUntil.c_str() );
                             printf( "  Switch On: %s\n", swON.c_str() );
                             printf( "     Health: %s (%s)\n", ohstat.c_str(), ohmsg.c_str() );
                         }

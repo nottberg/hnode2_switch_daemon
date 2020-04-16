@@ -110,6 +110,13 @@ class HNSDay
         HNSM_RESULT_T getSwitchOnList( HNS24HTime &tgtTime, std::vector< std::string > &swidList );
 };
 
+typedef enum HNScheduleMatrixState
+{
+  HNSM_SCHSTATE_ENABLED,   // Scheduling is enabled
+  HNSM_SCHSTATE_DISABLED,  // Scheduling is disabled
+  HNSM_SCHSTATE_INHIBIT    // Scheduling is inhibited for a duration.
+}HNSM_SCHSTATE_T;
+
 #define HNS_SCH_CFG_DEFAULT_PATH  "/var/cache/hnode2/"
 
 class HNScheduleMatrix : public HNDHConsumerInterface
@@ -127,6 +134,9 @@ class HNScheduleMatrix : public HNDHConsumerInterface
         std::string timezone;
 
         HNSDay  dayArr[ HNS_DAY_CNT ];
+
+        HNSM_SCHSTATE_T state;
+        HNS24HTime      inhibitUntil;
   
         HNSM_RESULT_T generateFilePath( std::string &fpath );
 
@@ -145,6 +155,15 @@ class HNScheduleMatrix : public HNDHConsumerInterface
         void clear();
 
         HNSM_RESULT_T loadSchedule( std::string devname, std::string instance );
+
+        HNSM_SCHSTATE_T getState();
+        std::string getStateStr();
+
+        void setStateDisabled();
+        void setStateEnabled();
+        void setStateInhibited( struct tm *time, std::string duration );
+        std::string getInhibitUntilStr();
+        bool checkInhibitExpire( struct tm *time );
 
         HNSM_RESULT_T getSwitchOnList( struct tm *time, std::vector< std::string > &swidList );
 

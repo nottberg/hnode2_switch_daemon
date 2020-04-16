@@ -148,9 +148,6 @@ HNSwitchDaemon::main( const std::vector<std::string>& args )
     // Buffer where events are returned 
     events = (struct epoll_event *) calloc( MAXEVENTS, sizeof event );
 
-    // Start reading time now.
-    //gettimeofday( &lastReadingTS, NULL );
-
     // Open Unix named socket for requests
     openListenerSocket( HN_SWDAEMON_DEVICE_NAME, instanceName );
 
@@ -188,12 +185,22 @@ HNSwitchDaemon::main( const std::vector<std::string>& args )
         ltime = time( &ltime );
         localtime_r( &ltime, &newtime );
 
+        // If scheduling is inhibited then check for
+        // for expiration.
+        if( schMat.getState() == HNSM_SCHSTATE_INHIBIT )
+        {
+            if( schMat.checkInhibitExpire( &newtime ) == true )
+            {
+                schMat.setStateEnabled();
+            }
+        }
+
         // Query the schedule matrix for the list of
         // switches that should be active currently.
         std::vector< std::string > swidOnList;
         if( seqQueue.hasActions() == true )
             seqQueue.getSwitchOnList( &newtime, swidOnList );
-        else
+        else if( schMat.getState() == HNSM_SCHSTATE_ENABLED )
             schMat.getSwitchOnList( &newtime, swidOnList );
 
         // Do some logging
@@ -652,6 +659,12 @@ HNSwitchDaemon::sendStatusPacket( struct tm *curTS, std::vector< std::string > &
     // Add the current time
     sprintf( tmpBuf, "%2.2d:%2.2d:%2.2d", curTS->tm_hour, curTS->tm_min, curTS->tm_sec );
     jsRoot.set( "time", (const char *)tmpBuf );
+
+    // Add the scheduler state
+    jsRoot.set( "schedulerState", schMat.getStateStr() );
+
+    // Add the inhibitUntil field
+    jsRoot.set( "inhibitUntil", schMat.getInhibitUntilStr() );
 
     // Add the switch on list
     std::string swOnStr;
