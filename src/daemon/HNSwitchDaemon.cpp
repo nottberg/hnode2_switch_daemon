@@ -547,10 +547,10 @@ HNSwitchDaemon::processClientRequest( int cfd )
             if( result != HNSM_RESULT_SUCCESS )
             {
                 // Create the packet.
-                HNSWDPacketDaemon packet( HNSWD_PTYPE_USEQ_ADD_RSP, HNSWD_RCODE_FAILURE, error );
+                HNSWDPacketDaemon opacket( HNSWD_PTYPE_USEQ_ADD_RSP, HNSWD_RCODE_FAILURE, error );
 
                 // Send packet to requesting client
-                packet.sendAll( cfd );
+                opacket.sendAll( cfd );
 
                 return HNSD_RESULT_SUCCESS;
             }
@@ -558,10 +558,10 @@ HNSwitchDaemon::processClientRequest( int cfd )
             seqQueue.debugPrint();
 
             // Create the packet.
-            HNSWDPacketDaemon packet( HNSWD_PTYPE_USEQ_ADD_RSP, HNSWD_RCODE_SUCCESS, error );
+            HNSWDPacketDaemon opacket( HNSWD_PTYPE_USEQ_ADD_RSP, HNSWD_RCODE_SUCCESS, error );
 
             // Send packet to requesting client
-            packet.sendAll( cfd );
+            opacket.sendAll( cfd );
         }
         break;
 
@@ -579,10 +579,10 @@ HNSwitchDaemon::processClientRequest( int cfd )
                 std::string error;
 
                 // Create the packet.
-                HNSWDPacketDaemon packet( HNSWD_PTYPE_SEQ_CANCEL_RSP, HNSWD_RCODE_FAILURE, error );
+                HNSWDPacketDaemon opacket( HNSWD_PTYPE_SEQ_CANCEL_RSP, HNSWD_RCODE_FAILURE, error );
 
                 // Send packet to requesting client
-                packet.sendAll( cfd );
+                opacket.sendAll( cfd );
 
                 return HNSD_RESULT_SUCCESS;
             }
@@ -590,10 +590,10 @@ HNSwitchDaemon::processClientRequest( int cfd )
             seqQueue.debugPrint();
 
             // Create the packet.
-            HNSWDPacketDaemon packet( HNSWD_PTYPE_SEQ_CANCEL_RSP, HNSWD_RCODE_SUCCESS, msg );
+            HNSWDPacketDaemon opacket( HNSWD_PTYPE_SEQ_CANCEL_RSP, HNSWD_RCODE_SUCCESS, msg );
 
             // Send packet to requesting client
-            packet.sendAll( cfd );
+            opacket.sendAll( cfd );
         }
         break;
 
@@ -601,6 +601,88 @@ HNSwitchDaemon::processClientRequest( int cfd )
         {
             log.info( "Switch Info request from client: %d", cfd );
             sendSwitchInfoPacket( cfd );
+        }
+        break;
+
+        case HNSWD_PTYPE_SCH_STATE_REQ:
+        {
+            pjs::Parser parser;
+            std::string msg;
+            std::string empty;
+            std::string error;
+            std::string newState;
+            std::string inhDur;
+
+            log.info( "Schedule State request from client: %d", cfd );
+
+            // Get inbound request message
+            packet.getMsg( msg );
+
+            // Parse the json
+            try
+            {
+                // Attempt to parse the json
+                pdy::Var varRoot = parser.parse( msg );
+
+                // Get a pointer to the root object
+                pjs::Object::Ptr jsRoot = varRoot.extract< pjs::Object::Ptr >();
+
+                newState = jsRoot->optValue( "state", empty );
+                inhDur   = jsRoot->optValue( "inhibitDuration", empty );
+
+                if( newState.empty() || inhDur.empty() )
+                {
+                    log.error( "ERROR: Schedule State request malformed." );
+
+                    // Send error packet.
+                    HNSWDPacketDaemon opacket( HNSWD_PTYPE_SCH_STATE_RSP, HNSWD_RCODE_FAILURE, error );
+                    opacket.sendAll( cfd );
+
+                    return HNSD_RESULT_SUCCESS;
+                }
+            }
+            catch( Poco::Exception ex )
+            {
+                log.error( "ERROR: Schedule State request malformed - parse failure: %s", ex.displayText().c_str() );
+
+                // Send error packet.
+                HNSWDPacketDaemon opacket( HNSWD_PTYPE_SCH_STATE_RSP, HNSWD_RCODE_FAILURE, error );
+                opacket.sendAll( cfd );
+
+                return HNSD_RESULT_SUCCESS;
+            }
+
+            if( "disable" == newState )
+                schMat.setStateDisabled();         
+            else if( "enable" == newState )
+                schMat.setStateEnabled();
+            else if( "inhibit" == newState )
+            {
+                struct tm newtime;
+                time_t ltime;
+ 
+                // Get the current time 
+                ltime = time( &ltime );
+                localtime_r( &ltime, &newtime );
+
+                schMat.setStateInhibited( &newtime, inhDur );
+            }
+            else
+            {
+                log.error( "ERROR: Schedule State request - request state is not supported: %s", newState.c_str() );
+
+                // Send error packet.
+                HNSWDPacketDaemon opacket( HNSWD_PTYPE_SCH_STATE_RSP, HNSWD_RCODE_FAILURE, error );
+                opacket.sendAll( cfd );
+
+                return HNSD_RESULT_SUCCESS;
+            }
+
+            // Send success response
+            HNSWDPacketDaemon opacket( HNSWD_PTYPE_SCH_STATE_RSP, HNSWD_RCODE_SUCCESS, empty );
+            opacket.sendAll( cfd );
+
+            return HNSD_RESULT_SUCCESS;
         }
         break;
 

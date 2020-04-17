@@ -304,7 +304,20 @@ class HNSwitchClient: public Application
                 std::stringstream msg;
 
                 // Error check the provided parameters
+                if(   ( _schstateNewState != "enable" )
+                   && ( _schstateNewState != "disable" )
+                   && ( _schstateNewState != "inhibit" ) )
+                {
+                    std::cout << "ERROR: Request scheduling state is not supported: " << _schstateNewState << std::endl;
+                    return Application::EXIT_SOFTWARE;
+                }
 
+                if( ( _schstateNewState == "inhibit" ) && ( _durationPresent == false ) )
+                {
+                    std::cout << "ERROR: When requesting the inhibit state a duration must be provided: " << _durationStr << std::endl;
+                    return Application::EXIT_SOFTWARE;
+                }
+          
                 // Build the payload message
                 // Create a json root object
                 pjs::Object jsRoot;
