@@ -138,7 +138,13 @@ class HNScheduleMatrix : public HNDHConsumerInterface
         HNSM_SCHSTATE_T state;
         HNS24HTime      inhibitUntil;
   
-        HNSM_RESULT_T generateFilePath( std::string &fpath );
+        HNSM_RESULT_T generateScheduleFilePath( std::string &fpath );
+        HNSM_RESULT_T generateStateFilePath( std::string &fpath );
+
+        HNSM_RESULT_T createDirectories();
+
+        HNSM_RESULT_T updateStateFile( HNSM_SCHSTATE_T value );
+        HNSM_RESULT_T readStateFile( HNSM_SCHSTATE_T &value );
 
     public:
         HNScheduleMatrix();
@@ -152,13 +158,16 @@ class HNScheduleMatrix : public HNDHConsumerInterface
         void setTimezone( std::string tzname );
         std::string getTimezone();
 
+        void setInstance( std::string devname, std::string instance );
+
         void clear();
 
-        HNSM_RESULT_T loadSchedule( std::string devname, std::string instance );
+        HNSM_RESULT_T loadSchedule();
 
         HNSM_SCHSTATE_T getState();
         std::string getStateStr();
 
+        void initState();
         void setStateDisabled();
         void setStateEnabled();
         void setStateInhibited( struct tm *time, std::string duration );

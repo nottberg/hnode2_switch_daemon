@@ -128,7 +128,9 @@ HNSwitchDaemon::main( const std::vector<std::string>& args )
     log.info( "Starting hnode2 switch daemon init" );
 
     // Initialize the schedule matrix
-    schMat.loadSchedule( HN_SWDAEMON_DEVICE_NAME, instanceName );
+    schMat.setInstance( HN_SWDAEMON_DEVICE_NAME, instanceName );
+    schMat.initState();
+    schMat.loadSchedule();
 
     // Initialize/Startup the switch manager
     switchMgr.setNotificationSink( this );
@@ -322,34 +324,6 @@ HNSwitchDaemon::removeSocketFromEPoll( int sfd )
 
     return HNSD_RESULT_SUCCESS;
 }
-
-/*
-HNSD_RESULT_T
-HNSwitchDaemon::init()
-{
-    // Default to health ok
-    healthOK = true;
-
-    epollFD = epoll_create1( 0 );
-    if( epollFD == -1 )
-    {
-        syslog( LOG_ERR, "epoll_create: %s", strerror(errno) );
-        return HNSD_RESULT_FAILURE;
-    }
-
-    // Buffer where events are returned 
-    events = (struct epoll_event *) calloc( MAXEVENTS, sizeof event );
-
-    // Initialize the switch manager
-    switchMgr.setNotificationSink( this );
-    switchMgr.loadConfiguration();
-
-    // Start reading time now.
-    gettimeofday( &lastReadingTS, NULL );
-
-    return HNSD_RESULT_SUCCESS;
-}
-*/
 
 HNSD_RESULT_T
 HNSwitchDaemon::addSignalSocket( int sfd )

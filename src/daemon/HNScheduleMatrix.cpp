@@ -333,7 +333,7 @@ HNScheduleMatrix::getTimezone()
 }
 
 HNSM_RESULT_T 
-HNScheduleMatrix::generateFilePath( std::string &fpath )
+HNScheduleMatrix::generateScheduleFilePath( std::string &fpath )
 {
     char tmpBuf[ 256 ];
  
@@ -360,8 +360,6 @@ HNScheduleMatrix::generateFilePath( std::string &fpath )
 void
 HNScheduleMatrix::clear()
 {
-    deviceName.clear();
-    instanceName.clear();
     timezone.clear();
 
     for( int i = 0; i < HNS_DAY_CNT; i++ )
@@ -371,23 +369,27 @@ HNScheduleMatrix::clear()
     }
 }
 
+void 
+HNScheduleMatrix::setInstance( std::string devname, std::string instance )
+{
+    // Copy over identifying information
+    deviceName   = devname;
+    instanceName = instance;
+}
+
 HNSM_RESULT_T 
-HNScheduleMatrix::loadSchedule( std::string devname, std::string instance )
+HNScheduleMatrix::loadSchedule()
 {
     std::string fpath;
 
     // Clear any existing matrix information
     clear();
 
-    // Copy over identifying information
-    deviceName   = devname;
-    instanceName = instance;
-
     // Generate and verify filename
-    if( generateFilePath( fpath ) != HNSM_RESULT_SUCCESS )
+    if( generateScheduleFilePath( fpath ) != HNSM_RESULT_SUCCESS )
     {
-        log.error( "ERROR: Failed to generate path to schedule matrix config for: %s %s", devname.c_str(), instance.c_str() );
-        health.setStatusMsg( HN_HEALTH_FAILED, HNSWD_ECODE_SM_FAILED_PATH_GEN, devname.c_str(), instance.c_str() );
+        log.error( "ERROR: Failed to generate path to schedule matrix config for: %s %s", deviceName.c_str(), instanceName.c_str() );
+        health.setStatusMsg( HN_HEALTH_FAILED, HNSWD_ECODE_SM_FAILED_PATH_GEN, deviceName.c_str(), instanceName.c_str() );
         return HNSM_RESULT_FAILURE;
     }    
 
@@ -527,6 +529,193 @@ HNScheduleMatrix::loadSchedule( std::string devname, std::string instance )
     return HNSM_RESULT_SUCCESS;
 }
 
+HNSM_RESULT_T
+HNScheduleMatrix::createDirectories()
+{
+    Poco::Path path( rootDirPath );
+    path.makeDirectory();
+
+    Poco::File dir( path );
+
+    if( dir.exists() )
+    {
+        if( dir.isDirectory() )
+            return HNSM_RESULT_SUCCESS;
+        else
+            return HNSM_RESULT_FAILURE;
+    }
+
+    // Create any intermediate directories
+    try
+    {
+        dir.createDirectories();
+    }
+    catch( Poco::Exception ex )
+    {
+        return HNSM_RESULT_FAILURE;
+    }
+
+    return HNSM_RESULT_SUCCESS;
+}
+
+HNSM_RESULT_T 
+HNScheduleMatrix::generateStateFilePath( std::string &fpath )
+{
+    char tmpBuf[ 256 ];
+ 
+    fpath.clear();
+
+    if( deviceName.empty() == true )
+        return HNSM_RESULT_FAILURE;
+
+    if( instanceName.empty() == true )
+        return HNSM_RESULT_FAILURE;
+  
+    sprintf( tmpBuf, "%s-%s", deviceName.c_str(), instanceName.c_str() );
+
+    Poco::Path path( rootDirPath );
+    path.makeDirectory();
+    path.pushDirectory( tmpBuf );
+    path.setFileName("scheduleState.json");
+
+    fpath = path.toString();
+
+    return HNSM_RESULT_SUCCESS;
+}
+
+HNSM_RESULT_T 
+HNScheduleMatrix::updateStateFile( HNSM_SCHSTATE_T value )
+{
+    std::string fpath;
+    std::string rState;
+
+    // Create directories if necessary
+    if( createDirectories() != HNSM_RESULT_SUCCESS )
+    {
+        return HNSM_RESULT_FAILURE;
+    }
+
+    // Generate and verify filename
+    if( generateStateFilePath( fpath ) != HNSM_RESULT_SUCCESS )
+    {
+        return HNSM_RESULT_FAILURE;
+    }    
+
+    // Build target file path and verify existance
+    Poco::Path path( fpath );
+    Poco::File file( path );
+
+    // Open a stream for writinging
+    std::ofstream ots;
+    ots.open( path.toString() );
+
+    if( ots.is_open() == false )
+    {
+        return HNSM_RESULT_FAILURE;
+    }
+
+    // Create a json root object
+    pjs::Object jsRoot;
+   
+    if( value == HNSM_SCHSTATE_DISABLED )
+        jsRoot.set( "state", "disabled" );
+    else
+        jsRoot.set( "state", "enabled" );
+
+    try
+    {
+        // Write out the generated json
+        pjs::Stringifier::stringify( jsRoot, ots, 1 );
+    }
+    catch( Poco::Exception ex )
+    {
+        ots.close();
+        return HNSM_RESULT_FAILURE;
+    }
+
+    // Close the stream
+    ots.close();
+
+    // Done
+    return HNSM_RESULT_SUCCESS;
+}
+
+HNSM_RESULT_T 
+HNScheduleMatrix::readStateFile( HNSM_SCHSTATE_T &value )
+{
+    std::string fpath;
+    std::string rState;
+
+    // Default return value;
+    value = HNSM_SCHSTATE_ENABLED;
+
+    // Generate and verify filename
+    if( generateStateFilePath( fpath ) != HNSM_RESULT_SUCCESS )
+    {
+        return HNSM_RESULT_FAILURE;
+    }    
+
+    // Build target file path and verify existance
+    Poco::Path path( fpath );
+    Poco::File file( path );
+
+    if( file.exists() == false || file.isFile() == false )
+    {
+        return HNSM_RESULT_FAILURE;
+    }
+
+    // Open a stream for reading
+    std::ifstream its;
+    its.open( path.toString() );
+
+    if( its.is_open() == false )
+    {
+        return HNSM_RESULT_FAILURE;
+    }
+
+    // Invoke the json parser
+    try
+    {
+        // Attempt to parse the json
+        std::string empty;
+        pjs::Parser parser;
+        pdy::Var varRoot = parser.parse( its );
+        its.close();
+
+        // Get a pointer to the root object
+        pjs::Object::Ptr jsRoot = varRoot.extract< pjs::Object::Ptr >();
+        rState = jsRoot->optValue( "state", empty );
+    }
+    catch( Poco::Exception ex )
+    {
+        its.close();
+        return HNSM_RESULT_FAILURE;
+    }
+
+    // Set the output value if appropriate
+    if( "disabled" == rState )
+        value = HNSM_SCHSTATE_DISABLED;
+
+    // Done
+    return HNSM_RESULT_SUCCESS;
+}
+
+void 
+HNScheduleMatrix::initState()
+{
+    HNSM_SCHSTATE_T pState;
+
+    HNSM_RESULT_T result = readStateFile( pState );
+
+    if( result != HNSM_RESULT_SUCCESS )
+    {
+        state = HNSM_SCHSTATE_ENABLED;
+        return;
+    }
+
+    state = pState;
+}
+
 HNSM_SCHSTATE_T 
 HNScheduleMatrix::getState()
 {
@@ -553,12 +742,14 @@ void
 HNScheduleMatrix::setStateDisabled()
 {
     state = HNSM_SCHSTATE_DISABLED;
+    updateStateFile( state );
 }
 
 void 
 HNScheduleMatrix::setStateEnabled()
 {
     state = HNSM_SCHSTATE_ENABLED;
+    updateStateFile( state );
 }
 
 void 
@@ -737,8 +928,6 @@ HNSequenceQueue::addUniformSequence( struct tm *time, std::string seqJSON, std::
         {
             HNS24HTime startTime;
             HNS24HTime endTime;
-
-            std::cout << "swid: " << *it << std::endl;
 
             // If the queue is empty then create the first entry
             if( actionList.empty() == true )
