@@ -27,9 +27,6 @@ class ClientRecord
         int getFD();
 };
 
-#define HN_SWDAEMON_DEVICE_NAME  "switch-daemon"
-#define HN_SWDAEMON_DEF_INSTANCE "default"
-
 typedef enum HNSwitchDaemonResultEnum
 {
   HNSD_RESULT_SUCCESS,

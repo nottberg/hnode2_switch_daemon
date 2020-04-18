@@ -52,7 +52,7 @@ HNSwitchDaemon::handleOption( const std::string& name, const std::string& value 
     ServerApplication::handleOption( name, value );
     if( "help" == name )
         _helpRequested = true;
-    else if( "debug " == name )
+    else if( "debug" == name )
         _debugLogging = true;
     else if( "instance" == name )
     {
@@ -128,10 +128,14 @@ HNSwitchDaemon::main( const std::vector<std::string>& args )
         log.setDaemon( true );
     }
 
+    // Indicate startup
+    log.info( "Starting hnode2 switch daemon init" );
+
     // Enable debug logging if requested
     if( _debugLogging == true )
     {
        log.setLevelLimit( HNDL_LOG_LEVEL_ALL );
+       log.debug("Debug logging has been enabled.");
     }
 
     // Initialize packet send flags
@@ -147,7 +151,6 @@ HNSwitchDaemon::main( const std::vector<std::string>& args )
     switchMgr.setDstLog( &log );
 
 
-    log.info( "Starting hnode2 switch daemon init" );
 
     // Initialize the schedule matrix
     schMat.setInstance( HN_SWDAEMON_DEVICE_NAME, instanceName );
