@@ -7,7 +7,7 @@ User=hnode2
 [Service]
 Type=forking
 Restart=always
-ExecStart=/usr/sbin/@DAEMON_NAME@
+ExecStart=/usr/sbin/@DAEMON_NAME@ --daemon
 
 [Install]
 WantedBy=multi-user.target
