@@ -2,11 +2,11 @@
 [Unit]
 Description=@DAEMON_NAME@
 After=network.target
-User=hnode2
 
 [Service]
 Type=forking
 Restart=always
+User=hnode2
 ExecStart=/usr/sbin/@DAEMON_NAME@ --daemon
 
 [Install]
