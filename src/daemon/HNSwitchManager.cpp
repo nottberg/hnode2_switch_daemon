@@ -25,7 +25,7 @@ extern "C"{
 #include <Poco/JSON/Parser.h>
 
 #include "HNSwitchManager.h"
-#include "HNSWDPacket.h"
+#include "HNSwitchDaemon.h"
 
 namespace pjs = Poco::JSON;
 namespace pdy = Poco::Dynamic;

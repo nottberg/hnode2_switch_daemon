@@ -21,7 +21,7 @@
 #include <Poco/JSON/Parser.h>
 
 #include "HNSWDPacketDaemon.h"
-#include "HNSwitchDaemon.h"
+#include "HNSwitchDaemonPrivate.h"
 
 using namespace Poco::Util;
 

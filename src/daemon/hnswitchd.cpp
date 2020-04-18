@@ -1,4 +1,4 @@
-#include "HNSwitchDaemon.h"
+#include "HNSwitchDaemonPrivate.h"
 
 #if 0
 #define MAXEVENTS 8
