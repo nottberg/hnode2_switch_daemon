@@ -40,14 +40,25 @@ HNSwitchDaemon::defineOptions( OptionSet& options )
 
     options.addOption(
               Option("debug","d", "Enable debug logging").required(false).repeatable(false));
+
+    options.addOption(
+              Option("instance", "", "Specify the instance name of this daemon.").required(false).repeatable(false).argument("name"));
+
 }
 
 void 
 HNSwitchDaemon::handleOption( const std::string& name, const std::string& value )
 {
     ServerApplication::handleOption( name, value );
-    if(name=="help") _helpRequested = true;
-    if(name=="debug") _debugLogging = true;
+    if( "help" == name )
+        _helpRequested = true;
+    else if( "debug " == name )
+        _debugLogging = true;
+    else if( "instance" == name )
+    {
+         _instancePresent = true;
+         _instance = value;
+    }
 }
 
 void 
@@ -98,8 +109,24 @@ HNSwitchDaemon::main( const std::vector<std::string>& args )
     uint32_t lastCRC = 0xFFFF;
         uint prevSec = 0;
 
+    if( _helpRequested )
+    {
+        displayHelp();
+        return Application::EXIT_OK;
+    }
+
     // Move me to before option processing.
-    instanceName = HN_SWDAEMON_DEF_INSTANCE;
+    if( _instancePresent )
+        instanceName = _instance;
+    else
+        instanceName = HN_SWDAEMON_DEF_INSTANCE;
+
+    // Check if we are running as a daemon
+    if( config().getBool("application.runAsDaemon", false ) )
+    {
+        // Configure where logging should end up
+        log.setDaemon( true );
+    }
 
     // Enable debug logging if requested
     if( _debugLogging == true )
@@ -119,11 +146,6 @@ HNSwitchDaemon::main( const std::vector<std::string>& args )
     seqQueue.setDstLog( &log );
     switchMgr.setDstLog( &log );
 
-    if( _helpRequested )
-    {
-        displayHelp();
-        return Application::EXIT_OK;
-    }
 
     log.info( "Starting hnode2 switch daemon init" );
 
@@ -272,6 +294,8 @@ HNSwitchDaemon::main( const std::vector<std::string>& args )
 
     // Close the devices
     switchMgr.closeDevices();
+
+    waitForTerminationRequest();
 
     log.info( "Hnode2 switch daemon shutdown" );
 
