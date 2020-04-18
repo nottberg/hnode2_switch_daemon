@@ -25,6 +25,7 @@ extern "C"{
 #include <Poco/JSON/Parser.h>
 
 #include "HNSwitchManager.h"
+#include "HNSWDPacket.h"
 
 namespace pjs = Poco::JSON;
 namespace pdy = Poco::Dynamic;
@@ -81,6 +82,21 @@ HNSWDevice::getDesc()
     return desc;
 }
 
+uint 
+HNSWDevice::getHealthComponentCount()
+{
+    return 1;
+}
+
+HNDaemonHealth* 
+HNSWDevice::getHealthComponent( uint index )
+{
+    if( index == 0 )
+        return &health;
+
+    return NULL;
+}
+
 HNSWI2CExpander::HNSWI2CExpander()
 {
     devnum  = 0;
@@ -109,11 +125,15 @@ HNSWI2CExpander::parsePair( std::string key, std::string value )
 HNSW_RESULT_T 
 HNSWI2CExpander::initDevice()
 {
+    char buf[ 512 ];
     if( getModel() == "mcp23008" )
     {
+        sprintf( buf, "i2-gpio-exp.mcp23008.%s.%x", getID().c_str(), busaddr );
+        health.setComponent( buf );
         return mcp23008Init();
     }
 
+    log.error( "The i2c device type is not supported: %d", getModel().c_str() ); 
     return HNSW_RESULT_FAILURE;
 }
 
@@ -125,6 +145,7 @@ HNSWI2CExpander::closeDevice()
         return mcp23008Close();
     }
 
+    log.error( "The i2c device type is not supported: %d", getModel().c_str() ); 
     return HNSW_RESULT_FAILURE;
 }
 
@@ -162,6 +183,7 @@ HNSWI2CExpander::updateStateToOn( std::string param )
         return HNSW_RESULT_SUCCESS;
     }
 
+    log.error( "The i2c device type is not supported: %d", getModel().c_str() ); 
     return HNSW_RESULT_FAILURE;
 }
 
@@ -173,24 +195,40 @@ HNSWI2CExpander::applyNextState()
         HNSW_RESULT_T result;
         uint curState;
 
+        // Clean up if already open
+        if( i2cfd == 0 )
+            return HNSW_RESULT_FAILURE;
+
         // Read the current state
         result = mcp23008GetPortState( curState );
    
         if( result != HNSW_RESULT_SUCCESS )
+        {
+            health.setStatusMsg( HN_HEALTH_FAILED, HNSWD_ECODE_MCP280XX_READ_STATE, busaddr );
             return result;
+        }
 
         // If nextState is different
         // then write the nextState value
         if( nextState != curState )
         {
             log.debug( "Applying new state to i2c exp %d:0x%x - %d", devnum, busaddr, nextState );
-            return mcp23008SetPortState( nextState );
+            result = mcp23008SetPortState( nextState );
+
+            if( result != HNSW_RESULT_SUCCESS )
+            {
+                health.setStatusMsg( HN_HEALTH_FAILED, HNSWD_ECODE_MCP280XX_WRITE_STATE, busaddr ); 
+                return result;
+            }
         }
+
+        health.setOK();
 
         // No change
         return HNSW_RESULT_SUCCESS;
     }
 
+    log.error( "The i2c device type is not supported: %d", getModel().c_str() ); 
     return HNSW_RESULT_FAILURE;
 }
 
@@ -209,8 +247,6 @@ HNSWI2CExpander::supportedModel( std::string model )
 
     return false;
 }
-
-
 
 typedef enum MCP230xxRegisterAddresses
 {
@@ -237,34 +273,40 @@ HNSWI2CExpander::mcp23008Init()
     // Attempt to open the i2c device 
     if( ( i2cfd = open( devfn, O_RDWR ) ) < 0 ) 
     {
-        log.error( "ERROR: Failure to open i2c bus device %s: %s", devfn, strerror( errno ) );    
+        log.error( "ERROR: Failure to open i2c bus device %s: %s", devfn, strerror( errno ) );
+        health.setStatusMsg( HN_HEALTH_FAILED, HNSWD_ECODE_MCP280XX_I2CBUS_OPEN, devfn, strerror( errno ) );
+        i2cfd = 0;
         return HNSW_RESULT_FAILURE;
     }
 
     // Tell the device which endpoint we want to talk to.
     if( ioctl( i2cfd, I2C_SLAVE, busaddr ) < 0 )
     {
-        log.error( "ERROR: Failure to set target device to 0x%x for i2c bus %s: %s", busaddr, devfn, strerror( errno ) );    
+        log.error( "ERROR: Failure to set target device to 0x%x for i2c bus %s: %s", busaddr, devfn, strerror( errno ) );
+        health.setStatusMsg( HN_HEALTH_FAILED, HNSWD_ECODE_MCP280XX_SET_TARGET, busaddr, devfn, strerror( errno ) );       
         return HNSW_RESULT_FAILURE;
     }
 
     // Clear all of the outputs initially.
     if( mcp23008SetPortState( 0 ) != HNSW_RESULT_SUCCESS )
     {
-        log.error( "ERROR: Failure to 0 port state for i2c addr 0x%x", busaddr );    
+        log.error( "ERROR: Failure to zero port state for i2c addr 0x%x", busaddr );
+        health.setStatusMsg( HN_HEALTH_FAILED, HNSWD_ECODE_MCP280XX_ZERO_STATE, busaddr ); 
         return HNSW_RESULT_FAILURE;
     }
 
     // Init the IO direction (inbound) and pullup (off) settings
     if( mcp23008SetPortMode( 0xFF ) != HNSW_RESULT_SUCCESS )
     {
-        log.error( "ERROR: Failure to set io direction to inbound for i2c addr 0x%x", busaddr );    
+        log.error( "ERROR: Failure to set io direction to inbound for i2c addr 0x%x", busaddr );
+        health.setStatusMsg( HN_HEALTH_FAILED, HNSWD_ECODE_MCP280XX_SET_INBOUND, busaddr );  
         return HNSW_RESULT_FAILURE;
     }
 
     if( mcp23008SetPortPullup( 0x00 ) != HNSW_RESULT_SUCCESS )
     {
-        log.error( "ERROR: Failure to disable pullups for i2c addr 0x%x", busaddr );    
+        log.error( "ERROR: Failure to disable pullups for i2c addr 0x%x", busaddr );
+        health.setStatusMsg( HN_HEALTH_FAILED, HNSWD_ECODE_MCP280XX_SET_PULLUP, busaddr );   
         return HNSW_RESULT_FAILURE;
     }
 
@@ -272,7 +314,8 @@ HNSWI2CExpander::mcp23008Init()
     uint currentState;
     if( mcp23008GetPortState( currentState ) != HNSW_RESULT_SUCCESS )
     {
-        log.error( "ERROR: Failure to read current state for i2c addr 0x%x", busaddr );    
+        log.error( "ERROR: Failure to read current state for i2c addr 0x%x", busaddr );
+        health.setStatusMsg( HN_HEALTH_FAILED, HNSWD_ECODE_MCP280XX_READ_STATE, busaddr );   
         return HNSW_RESULT_FAILURE;
     }
 
@@ -281,11 +324,14 @@ HNSWI2CExpander::mcp23008Init()
     // Turn all of the pins over to outputs
     if( mcp23008SetPortMode( 0x00 ) != HNSW_RESULT_SUCCESS )
     {
-        log.error( "ERROR: Failure to set io direction to outbound for i2c addr 0x%x", busaddr );    
+        log.error( "ERROR: Failure to set io direction to outbound for i2c addr 0x%x", busaddr );
+        health.setStatusMsg( HN_HEALTH_FAILED, HNSWD_ECODE_MCP280XX_SET_IODIR, busaddr );  
         return HNSW_RESULT_FAILURE;
     }
 
     log.info( "Control device initialized - model: %s  busaddr:  0x%x  devpath: %s", getModel().c_str(), busaddr, devfn );
+
+    health.setOK();
 
     return HNSW_RESULT_SUCCESS;
 }
@@ -308,6 +354,9 @@ HNSWI2CExpander::mcp23008GetPortMode( uint &value )
 {
     int32_t result;
 
+    if( i2cfd == 0 )
+        return HNSW_RESULT_FAILURE;
+
     result = i2c_smbus_read_byte_data( i2cfd, MCP23008_IODIR );
 
     if( result < 0 )
@@ -322,6 +371,9 @@ HNSW_RESULT_T
 HNSWI2CExpander::mcp23008GetPortPullup( uint &value )
 {
     int32_t result;
+
+    if( i2cfd == 0 )
+        return HNSW_RESULT_FAILURE;
 
     result = i2c_smbus_read_byte_data( i2cfd, MCP23008_GPPU );
 
@@ -338,6 +390,9 @@ HNSWI2CExpander::mcp23008GetPortState( uint &value )
 {
     int32_t result;
 
+    if( i2cfd == 0 )
+        return HNSW_RESULT_FAILURE;
+
     result = i2c_smbus_read_byte_data( i2cfd, MCP23008_GPIO );
 
     if( result < 0 )
@@ -352,6 +407,9 @@ HNSW_RESULT_T
 HNSWI2CExpander::mcp23008SetPortMode( uint value )
 {
     int32_t result;
+
+    if( i2cfd == 0 )
+        return HNSW_RESULT_FAILURE;
 
     result = i2c_smbus_write_byte_data( i2cfd, MCP23008_IODIR, value );
 
@@ -369,6 +427,9 @@ HNSWI2CExpander::mcp23008SetPortPullup( uint value )
 {
     int32_t result;
 
+    if( i2cfd == 0 )
+        return HNSW_RESULT_FAILURE;
+
     result = i2c_smbus_write_byte_data( i2cfd, MCP23008_GPPU, value );
 
     if( result < 0 )
@@ -384,6 +445,9 @@ HNSW_RESULT_T
 HNSWI2CExpander::mcp23008SetPortState( uint value )
 {
     int32_t result;
+
+    if( i2cfd == 0 )
+        return HNSW_RESULT_FAILURE;
 
     result = i2c_smbus_write_byte_data( i2cfd, MCP23008_OLAT, value );
 
@@ -486,6 +550,7 @@ HNSWSwitch::debugPrint( uint offset, HNDaemonLogSrc &log )
 }
 
 HNSwitchManager::HNSwitchManager()
+: health( "Switch Manager" )
 {
     rootDirPath = HNSW_ROOT_DIRECTORY_DEFAULT; 
     notifySink = NULL;
@@ -573,6 +638,7 @@ HNSwitchManager::loadConfiguration( std::string devname, std::string instance )
     if( generateFilePath( fpath ) != HNSW_RESULT_SUCCESS )
     {
         log.error( "ERROR: Failed to generate path to switch config for: %s %s", devname, instance );
+        health.setStatusMsg( HN_HEALTH_FAILED, HNSWD_ECODE_SWM_FAILED_PATH_GEN, devname.c_str(), instance.c_str() ); 
         return HNSW_RESULT_FAILURE;
     }    
 
@@ -585,6 +651,7 @@ HNSwitchManager::loadConfiguration( std::string devname, std::string instance )
     if( file.exists() == false || file.isFile() == false )
     {
         log.error( "ERROR: Switch config file does not exist: %s", path.toString().c_str() );
+        health.setStatusMsg( HN_HEALTH_FAILED, HNSWD_ECODE_SWM_CONFIG_MISSING, path.toString().c_str() ); 
         return HNSW_RESULT_FAILURE;
     }
 
@@ -595,6 +662,7 @@ HNSwitchManager::loadConfiguration( std::string devname, std::string instance )
     if( its.is_open() == false )
     {
         log.error( "ERROR: Switch config file open failed: %s", path.toString().c_str() );
+        health.setStatusMsg( HN_HEALTH_FAILED, HNSWD_ECODE_SWM_CONFIG_OPEN, path.toString().c_str() ); 
         return HNSW_RESULT_FAILURE;
     }
 
@@ -738,6 +806,7 @@ HNSwitchManager::loadConfiguration( std::string devname, std::string instance )
     catch( Poco::Exception ex )
     {
         log.error( "ERROR: Switch config file json parse failure: %s", ex.displayText().c_str() );
+        health.setStatusMsg( HN_HEALTH_FAILED, HNSWD_ECODE_SWM_CONFIG_PARSER, ex.displayText().c_str() ); 
         its.close();
         return HNSW_RESULT_FAILURE;
     }
@@ -747,7 +816,59 @@ HNSwitchManager::loadConfiguration( std::string devname, std::string instance )
 
     log.info( "Switch config successfully loaded." );
 
+    // Set health to ok
+    health.setOK();
+
     // Done
+    return HNSW_RESULT_SUCCESS;
+}
+
+HNSW_RESULT_T 
+HNSwitchManager::getSwitchInfo( std::string &jsonMsg )
+{
+    std::stringstream msgStream;
+
+    jsonMsg.clear();
+
+    char tmpBuf[128];
+
+    // Create a json root object
+    pjs::Object jsRoot;
+
+    // Create an array of switch info
+    pjs::Array jsSWList;
+
+    // Add a switch info object to the array for each switch
+    for( std::map< std::string, HNSWSwitch >::iterator it = switchMap.begin(); it != switchMap.end(); it++ )
+    {
+        // Add overall health to output.
+        pjs::Object jsSWInfo;
+
+        jsSWInfo.set( "swid", it->second.getSWID() );
+        jsSWInfo.set( "description", it->second.getDesc() );
+
+        jsSWList.add( jsSWInfo );
+    }
+
+    // Add switch info array to the root object
+    jsRoot.set( "swList", jsSWList );
+
+    // Render into a json string.
+    try
+    {
+        // Write out the generated json
+        pjs::Stringifier::stringify( jsRoot, msgStream );
+    }
+    catch( ... )
+    {
+        // Something went wrong
+        return HNSW_RESULT_FAILURE;
+    }
+
+    // Return to the caller.
+    jsonMsg = msgStream.str();
+
+    // Success
     return HNSW_RESULT_SUCCESS;
 }
 
@@ -826,35 +947,30 @@ HNSwitchManager::processOnState( std::vector< std::string > &swidOnList )
     return HNSW_RESULT_SUCCESS;
 }
 
-unsigned int 
-HNSwitchManager::getSwitchCount()
+uint 
+HNSwitchManager::getHealthComponentCount()
 {
-    return switchMap.size();
+    return ( 1 + deviceMap.size() );
 }
 
-HNSWSwitch *
-HNSwitchManager::getSwitchByIndex( int index )
+HNDaemonHealth* 
+HNSwitchManager::getHealthComponent( uint index )
 {
-    uint i = 0;
-    for( std::map< std::string, HNSWSwitch >::iterator it = switchMap.begin(); it != switchMap.end(); it++ )
+    if( index == 0 )
+        return &health;
+    else if( index < getHealthComponentCount() )
     {
-        if( i == index )
-            return &(it->second);
-        i++;
+        index -= 1;
+        for( std::map< std::string, HNSWDevice* >::iterator it = deviceMap.begin(); it != deviceMap.end(); it++ )
+        {
+            if( index == 0 )
+                return it->second->getHealthComponent( 0 );
+
+            index -= 1;
+        }
     }
 
     return NULL;
-}
-
-HNSWSwitch *
-HNSwitchManager::getSwitchByID( std::string switchID )
-{
-    std::map< std::string, HNSWSwitch >::iterator it = switchMap.find( switchID );
-
-    if( it == switchMap.end() )
-        return NULL;
-
-    return &(it->second);
 }
 
 void

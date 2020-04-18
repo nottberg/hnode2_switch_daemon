@@ -10,6 +10,7 @@
 #include "Poco/Util/OptionSet.h"
 
 #include "HNDaemonLog.h"
+#include "HNDaemonHealth.h"
 #include "HNSwitchManager.h"
 #include "HNScheduleMatrix.h"
 
@@ -56,15 +57,16 @@ class HNSwitchDaemon : public Poco::Util::ServerApplication, public HNSwitchMana
 
         std::map< int, ClientRecord > clientMap;
 
+        HNScheduleMatrix schMat;
+        HNSequenceQueue  seqQueue;
         HNSwitchManager  switchMgr;
+
 
         bool           sendStatus;
 
-        bool           healthOK;
-        std::string    curErrMsg;
-        struct timeval lastReadingTS;
+        HNDaemonHealth overallHealth;
 
-        HNScheduleMatrix schMat;
+        void updateOverallHealth();
 
         HNSD_RESULT_T addSocketToEPoll( int sfd );
         HNSD_RESULT_T removeSocketFromEPoll( int sfd );        
@@ -73,7 +75,9 @@ class HNSwitchDaemon : public Poco::Util::ServerApplication, public HNSwitchMana
         HNSD_RESULT_T processClientRequest( int efd );
         HNSD_RESULT_T closeClientConnection( int cfd );
 
-        void sendStatusPacket( struct timeval *curTS );
+        void sendStatusPacket( struct tm *curTS, std::vector< std::string > &swOnList );
+        void sendComponentHealthPacket( int clientFD );
+        void sendSwitchInfoPacket( int clientFD );
 
         uint32_t logSwitchChanges( struct tm *time, std::vector< std::string > &onList, uint32_t lastCRC );
 

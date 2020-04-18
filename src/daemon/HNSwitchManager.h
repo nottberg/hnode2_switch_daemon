@@ -9,6 +9,7 @@
 #include <stdio.h>
 
 #include "HNDaemonLog.h"
+#include "HNDaemonHealth.h"
 
 typedef enum HNSwitchManagerResultEnum
 {
@@ -16,7 +17,7 @@ typedef enum HNSwitchManagerResultEnum
     HNSW_RESULT_FAILURE
 }HNSW_RESULT_T;
 
-class HNSWDevice
+class HNSWDevice : public HNDHConsumerInterface
 {
     private:
         std::string id;
@@ -25,6 +26,7 @@ class HNSWDevice
 
     protected:
         HNDaemonLogSrc log;
+        HNDaemonHealth health;
 
     public:
         HNSWDevice();
@@ -39,6 +41,9 @@ class HNSWDevice
         std::string getModel();
         std::string getID();
         std::string getDesc();
+
+        virtual uint getHealthComponentCount();
+        virtual HNDaemonHealth* getHealthComponent( uint index );
 
         virtual void parsePair( std::string, std::string ) = 0;
         virtual void debugPrint( uint offset ) = 0;
@@ -145,10 +150,11 @@ class HNSwitchManagerNotifications
 
 #define HNSW_ROOT_DIRECTORY_DEFAULT "/var/cache/hnode2"
 
-class HNSwitchManager
+class HNSwitchManager : public HNDHConsumerInterface
 {
     private:
         HNDaemonLogSrc log;
+        HNDaemonHealth health;
 
         std::string rootDirPath;
         HNSwitchManagerNotifications *notifySink;
@@ -180,11 +186,12 @@ class HNSwitchManager
         HNSW_RESULT_T initDevices();
         HNSW_RESULT_T closeDevices();
 
-        unsigned int getSwitchCount();
-        HNSWSwitch* getSwitchByIndex( int index );
-        HNSWSwitch* getSwitchByID( std::string swid );
+        HNSW_RESULT_T getSwitchInfo( std::string &jsonMsg );
 
         HNSW_RESULT_T processOnState( std::vector< std::string > &swidOnList );
+
+        virtual uint getHealthComponentCount();
+        virtual HNDaemonHealth* getHealthComponent( uint index );
 
         void debugPrint();
 };

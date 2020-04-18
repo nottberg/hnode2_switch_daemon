@@ -3,6 +3,8 @@
 #include <fstream>
 #include <ios>
 #include <exception>
+#include <iterator>
+#include <regex>
 
 #include <Poco/Path.h>
 #include <Poco/File.h>
@@ -74,6 +76,17 @@ HNS24HTime::setFromHMS( uint hour, uint min, uint sec )
 }
 
 HNSM_RESULT_T 
+HNS24HTime::setFromSeconds( uint seconds )
+{
+    // Set to provided value, cieling 24 hours.
+    secOfDay = seconds;
+    if( secOfDay > (24 * 60 * 60) )
+        secOfDay = (24 * 60 * 60);
+
+    return HNSM_RESULT_SUCCESS;
+}
+
+HNSM_RESULT_T 
 HNS24HTime::parseTime( std::string value )
 {
     uint hour;
@@ -85,10 +98,36 @@ HNS24HTime::parseTime( std::string value )
     return setFromHMS( hour, min, sec );
 }
 
+void
+HNS24HTime::addSeconds( uint seconds )
+{
+    // Add the two times, cap 24 hours
+    secOfDay = (secOfDay + seconds); 
+    if( secOfDay > (24 * 60 * 60) )
+        secOfDay = (24 * 60 * 60);
+
+}
+
+void
+HNS24HTime::addDuration( HNS24HTime &duration )
+{
+    // Add the two times, cap 24 hours
+    secOfDay = (secOfDay + duration.secOfDay); 
+    if( secOfDay > (24 * 60 * 60) )
+        secOfDay = (24 * 60 * 60);
+}
 
 HNSAction::HNSAction()
 {
 
+}
+
+HNSAction::HNSAction( HNS_ACT_T actval, HNS24HTime &startTime, HNS24HTime &endTime, std::string swID )
+{
+    action = actval;
+    start  = startTime;
+    end    = endTime;
+    swid   = swID;
 }
 
 HNSAction::~HNSAction()
@@ -246,6 +285,7 @@ HNSDay::debugPrint( uint offset, HNDaemonLogSrc &log )
 }
 
 HNScheduleMatrix::HNScheduleMatrix()
+: health( "Schedule Matrix" )
 {
     rootDirPath = HNS_SCH_CFG_DEFAULT_PATH;
 
@@ -253,6 +293,8 @@ HNScheduleMatrix::HNScheduleMatrix()
     {
         dayArr[i].setID( (HNS_DAY_INDX_T) i, scDayNames[i] );
     }
+
+    state = HNSM_SCHSTATE_ENABLED;
 }
 
 HNScheduleMatrix::~HNScheduleMatrix()
@@ -284,8 +326,14 @@ HNScheduleMatrix::setTimezone( std::string tzname )
     timezone = tzname;
 }
 
+std::string
+HNScheduleMatrix::getTimezone()
+{
+    return timezone;
+}
+
 HNSM_RESULT_T 
-HNScheduleMatrix::generateFilePath( std::string &fpath )
+HNScheduleMatrix::generateScheduleFilePath( std::string &fpath )
 {
     char tmpBuf[ 256 ];
  
@@ -312,8 +360,6 @@ HNScheduleMatrix::generateFilePath( std::string &fpath )
 void
 HNScheduleMatrix::clear()
 {
-    deviceName.clear();
-    instanceName.clear();
     timezone.clear();
 
     for( int i = 0; i < HNS_DAY_CNT; i++ )
@@ -323,22 +369,27 @@ HNScheduleMatrix::clear()
     }
 }
 
+void 
+HNScheduleMatrix::setInstance( std::string devname, std::string instance )
+{
+    // Copy over identifying information
+    deviceName   = devname;
+    instanceName = instance;
+}
+
 HNSM_RESULT_T 
-HNScheduleMatrix::loadSchedule( std::string devname, std::string instance )
+HNScheduleMatrix::loadSchedule()
 {
     std::string fpath;
 
     // Clear any existing matrix information
     clear();
 
-    // Copy over identifying information
-    deviceName   = devname;
-    instanceName = instance;
-
     // Generate and verify filename
-    if( generateFilePath( fpath ) != HNSM_RESULT_SUCCESS )
+    if( generateScheduleFilePath( fpath ) != HNSM_RESULT_SUCCESS )
     {
-        log.error( "ERROR: Failed to generate path to schedule matrix config for: %s %s", devname, instance );
+        log.error( "ERROR: Failed to generate path to schedule matrix config for: %s %s", deviceName.c_str(), instanceName.c_str() );
+        health.setStatusMsg( HN_HEALTH_FAILED, HNSWD_ECODE_SM_FAILED_PATH_GEN, deviceName.c_str(), instanceName.c_str() );
         return HNSM_RESULT_FAILURE;
     }    
 
@@ -351,6 +402,7 @@ HNScheduleMatrix::loadSchedule( std::string devname, std::string instance )
     if( file.exists() == false || file.isFile() == false )
     {
         log.error( "ERROR: Schedule matrix config file does not exist: %s", path.toString().c_str() );
+        health.setStatusMsg( HN_HEALTH_FAILED, HNSWD_ECODE_SM_CONFIG_MISSING, path.toString().c_str() ); 
         return HNSM_RESULT_FAILURE;
     }
 
@@ -361,6 +413,7 @@ HNScheduleMatrix::loadSchedule( std::string devname, std::string instance )
     if( its.is_open() == false )
     {
         log.error( "ERROR: Schedule matrix config file open failed: %s", path.toString().c_str() );
+        health.setStatusMsg( HN_HEALTH_FAILED, HNSWD_ECODE_SM_CONFIG_OPEN, path.toString().c_str() ); 
         return HNSM_RESULT_FAILURE;
     }
 
@@ -454,6 +507,7 @@ HNScheduleMatrix::loadSchedule( std::string devname, std::string instance )
     catch( Poco::Exception ex )
     {
         log.error( "ERROR: Schedule matrix config file json parse failure: %s", ex.displayText().c_str() );
+        health.setStatusMsg( HN_HEALTH_FAILED, HNSWD_ECODE_SM_CONFIG_PARSER, ex.displayText().c_str() ); 
         its.close();
         return HNSM_RESULT_FAILURE;
     }
@@ -469,8 +523,283 @@ HNScheduleMatrix::loadSchedule( std::string devname, std::string instance )
 
     log.info( "Schedule matrix config successfully loaded." );
 
+    health.setOK();
+
     // Done
     return HNSM_RESULT_SUCCESS;
+}
+
+HNSM_RESULT_T
+HNScheduleMatrix::createDirectories()
+{
+    Poco::Path path( rootDirPath );
+    path.makeDirectory();
+
+    Poco::File dir( path );
+
+    if( dir.exists() )
+    {
+        if( dir.isDirectory() )
+            return HNSM_RESULT_SUCCESS;
+        else
+            return HNSM_RESULT_FAILURE;
+    }
+
+    // Create any intermediate directories
+    try
+    {
+        dir.createDirectories();
+    }
+    catch( Poco::Exception ex )
+    {
+        return HNSM_RESULT_FAILURE;
+    }
+
+    return HNSM_RESULT_SUCCESS;
+}
+
+HNSM_RESULT_T 
+HNScheduleMatrix::generateStateFilePath( std::string &fpath )
+{
+    char tmpBuf[ 256 ];
+ 
+    fpath.clear();
+
+    if( deviceName.empty() == true )
+        return HNSM_RESULT_FAILURE;
+
+    if( instanceName.empty() == true )
+        return HNSM_RESULT_FAILURE;
+  
+    sprintf( tmpBuf, "%s-%s", deviceName.c_str(), instanceName.c_str() );
+
+    Poco::Path path( rootDirPath );
+    path.makeDirectory();
+    path.pushDirectory( tmpBuf );
+    path.setFileName("scheduleState.json");
+
+    fpath = path.toString();
+
+    return HNSM_RESULT_SUCCESS;
+}
+
+HNSM_RESULT_T 
+HNScheduleMatrix::updateStateFile( HNSM_SCHSTATE_T value )
+{
+    std::string fpath;
+    std::string rState;
+
+    // Create directories if necessary
+    if( createDirectories() != HNSM_RESULT_SUCCESS )
+    {
+        return HNSM_RESULT_FAILURE;
+    }
+
+    // Generate and verify filename
+    if( generateStateFilePath( fpath ) != HNSM_RESULT_SUCCESS )
+    {
+        return HNSM_RESULT_FAILURE;
+    }    
+
+    // Build target file path and verify existance
+    Poco::Path path( fpath );
+    Poco::File file( path );
+
+    // Open a stream for writinging
+    std::ofstream ots;
+    ots.open( path.toString() );
+
+    if( ots.is_open() == false )
+    {
+        return HNSM_RESULT_FAILURE;
+    }
+
+    // Create a json root object
+    pjs::Object jsRoot;
+   
+    if( value == HNSM_SCHSTATE_DISABLED )
+        jsRoot.set( "state", "disabled" );
+    else
+        jsRoot.set( "state", "enabled" );
+
+    try
+    {
+        // Write out the generated json
+        pjs::Stringifier::stringify( jsRoot, ots, 1 );
+    }
+    catch( Poco::Exception ex )
+    {
+        ots.close();
+        return HNSM_RESULT_FAILURE;
+    }
+
+    // Close the stream
+    ots.close();
+
+    // Done
+    return HNSM_RESULT_SUCCESS;
+}
+
+HNSM_RESULT_T 
+HNScheduleMatrix::readStateFile( HNSM_SCHSTATE_T &value )
+{
+    std::string fpath;
+    std::string rState;
+
+    // Default return value;
+    value = HNSM_SCHSTATE_ENABLED;
+
+    // Generate and verify filename
+    if( generateStateFilePath( fpath ) != HNSM_RESULT_SUCCESS )
+    {
+        return HNSM_RESULT_FAILURE;
+    }    
+
+    // Build target file path and verify existance
+    Poco::Path path( fpath );
+    Poco::File file( path );
+
+    if( file.exists() == false || file.isFile() == false )
+    {
+        return HNSM_RESULT_FAILURE;
+    }
+
+    // Open a stream for reading
+    std::ifstream its;
+    its.open( path.toString() );
+
+    if( its.is_open() == false )
+    {
+        return HNSM_RESULT_FAILURE;
+    }
+
+    // Invoke the json parser
+    try
+    {
+        // Attempt to parse the json
+        std::string empty;
+        pjs::Parser parser;
+        pdy::Var varRoot = parser.parse( its );
+        its.close();
+
+        // Get a pointer to the root object
+        pjs::Object::Ptr jsRoot = varRoot.extract< pjs::Object::Ptr >();
+        rState = jsRoot->optValue( "state", empty );
+    }
+    catch( Poco::Exception ex )
+    {
+        its.close();
+        return HNSM_RESULT_FAILURE;
+    }
+
+    // Set the output value if appropriate
+    if( "disabled" == rState )
+        value = HNSM_SCHSTATE_DISABLED;
+
+    // Done
+    return HNSM_RESULT_SUCCESS;
+}
+
+void 
+HNScheduleMatrix::initState()
+{
+    HNSM_SCHSTATE_T pState;
+
+    HNSM_RESULT_T result = readStateFile( pState );
+
+    if( result != HNSM_RESULT_SUCCESS )
+    {
+        state = HNSM_SCHSTATE_ENABLED;
+        return;
+    }
+
+    state = pState;
+}
+
+HNSM_SCHSTATE_T 
+HNScheduleMatrix::getState()
+{
+    return state;
+}
+
+std::string
+HNScheduleMatrix::getStateStr()
+{
+    switch( state )
+    {
+        case HNSM_SCHSTATE_ENABLED:
+            return "enabled";
+        case HNSM_SCHSTATE_DISABLED:
+            return "disabled";
+        case HNSM_SCHSTATE_INHIBIT:
+            return "inhibit";
+    }
+
+    return "notset";
+}
+
+void 
+HNScheduleMatrix::setStateDisabled()
+{
+    state = HNSM_SCHSTATE_DISABLED;
+    updateStateFile( state );
+}
+
+void 
+HNScheduleMatrix::setStateEnabled()
+{
+    state = HNSM_SCHSTATE_ENABLED;
+    updateStateFile( state );
+}
+
+void 
+HNScheduleMatrix::setStateInhibited( struct tm *time, std::string durationStr )
+{
+    HNS24HTime duration;
+
+    state = HNSM_SCHSTATE_INHIBIT;
+
+    duration.parseTime( durationStr.c_str() );
+
+    inhibitUntil.setFromHMS( time->tm_hour, time->tm_min, time->tm_sec );
+    inhibitUntil.addDuration( duration );
+}
+
+std::string
+HNScheduleMatrix::getInhibitUntilStr()
+{
+    if( state != HNSM_SCHSTATE_INHIBIT )
+        return "00:00:00";
+
+    return inhibitUntil.getHMSStr();
+}
+
+bool 
+HNScheduleMatrix::checkInhibitExpire( struct tm *time )
+{
+    HNS24HTime curTime;
+
+    curTime.setFromHMS(  time->tm_hour, time->tm_min, time->tm_sec );
+
+    if( inhibitUntil.getSeconds() <= curTime.getSeconds() )
+        return true;
+
+    return false;
+}
+
+uint 
+HNScheduleMatrix::getHealthComponentCount()
+{
+    return 1;
+}
+
+HNDaemonHealth* 
+HNScheduleMatrix::getHealthComponent( uint index )
+{
+    if( index == 0 )
+        return &health;
+
+    return NULL;
 }
 
 HNSM_RESULT_T 
@@ -500,4 +829,225 @@ HNScheduleMatrix::debugPrint()
     }
 }
 
+
+HNSequenceQueue::HNSequenceQueue()
+{
+
+}
+
+HNSequenceQueue::~HNSequenceQueue()
+{
+
+}
+
+void 
+HNSequenceQueue::setDstLog( HNDaemonLog *logPtr )
+{
+    log.setDstLog( logPtr );
+}
+
+HNSM_RESULT_T 
+HNSequenceQueue::cancelSequences()
+{
+    actionList.clear();
+    return HNSM_RESULT_SUCCESS;
+}
+
+#if 0
+// Example uniform sequence json
+{
+  "onTime":"00:01:00",
+  "offTime":"00:05:00",
+  "swidList": "sw1 sw2"
+}
+#endif
+
+HNSM_RESULT_T 
+HNSequenceQueue::addUniformSequence( struct tm *time, std::string seqJSON, std::string &errMsg )
+{
+    HNSM_RESULT_T result;
+    HNS24HTime onPeriod;
+    HNS24HTime offPeriod;
+    const std::regex ws_re("\\s+"); // whitespace
+    pjs::Parser parser;
+    std::string empty;
+
+    errMsg.clear();
+
+    // Parse the json
+    try
+    {
+        // Attempt to parse the json
+        pdy::Var varRoot = parser.parse( seqJSON );
+
+        // Get a pointer to the root object
+        pjs::Object::Ptr jsRoot = varRoot.extract< pjs::Object::Ptr >();
+
+        std::string onDuration = jsRoot->optValue( "onDuration", empty );
+        if( onDuration.empty() )
+        {
+            // Missing required fields.
+            log.warn( "Warning: Received Add Sequence request is missing the required 'onTime' field." );
+            return HNSM_RESULT_FAILURE;
+        }
+
+        // Get the on time duration
+        result = onPeriod.parseTime( onDuration );
+        if( result != HNSM_RESULT_SUCCESS )
+        {
+            return result;
+        }
+
+        std::string offDuration = jsRoot->optValue( "offDuration", empty );
+        if( offDuration.empty() )
+        {
+            // Missing required fields.
+            log.warn( "Warning: Received Add Sequence request is missing the required 'offTime' field." );
+            return HNSM_RESULT_FAILURE;
+        }
+
+        // Get the off time duration
+        result = offPeriod.parseTime( offDuration );
+        if( result != HNSM_RESULT_SUCCESS )
+        {
+            return result;
+        }
+
+        std::string swidList = jsRoot->optValue( "swidList", empty );
+        if( swidList.empty() )
+        {
+            // Missing required fields.
+            log.warn( "Warning: Received Add Sequence request is missing the required 'swidList' field." );
+            return HNSM_RESULT_FAILURE;
+        }
+
+        // Walk the swid string
+        std::sregex_token_iterator it( swidList.begin(), swidList.end(), ws_re, -1 );
+        const std::sregex_token_iterator end;
+        while( it != end )
+        {
+            HNS24HTime startTime;
+            HNS24HTime endTime;
+
+            // If the queue is empty then create the first entry
+            if( actionList.empty() == true )
+            {
+                // The start time sould be the current time
+                startTime.setFromHMS( time->tm_hour, time->tm_min, time->tm_sec );
+
+                // End time should be start time, plus on period duration
+                endTime.setFromHMS( time->tm_hour, time->tm_min, time->tm_sec );
+                endTime.addDuration( onPeriod );
+
+                // Add a new switch action to the queue.
+                HNSAction swact( HNS_ACT_SWON, startTime, endTime, *it );
+                actionList.push_back( swact );
+            }
+            else
+            {
+                // Since there is a preceding entry, base all of the time
+                // calculation off its end time
+                HNSAction& lastAct = actionList.back();
+
+                // Init start time with ending time of previous.
+                startTime.setFromSeconds( lastAct.getEndSeconds() );
+            
+                // Delay offPeriod seconds between switches, 
+                // but ensure at least one second of delay.
+                if( offPeriod.getSeconds() == 0 )
+                    startTime.addSeconds( 1 );
+                else
+                    startTime.addDuration( offPeriod );
+            
+                // Based of start time, end after onPeriod seconds.
+                endTime.setFromSeconds( startTime.getSeconds() );
+                endTime.addDuration( onPeriod );
+
+                // Add a new switch action to the end of the queue.
+                HNSAction swact( HNS_ACT_SWON, startTime, endTime, *it );
+                actionList.push_back( swact );
+            }
+
+            it++;
+        }
+    }
+    catch( Poco::Exception ex )
+    {
+        log.error( "ERROR: Schedule matrix config file json parse failure: %s", ex.displayText().c_str() );
+        return HNSM_RESULT_FAILURE;
+    }
+
+    // Success
+    return HNSM_RESULT_SUCCESS;
+}
+
+bool
+HNSequenceQueue::hasActions()
+{
+    return ( actionList.empty() ? false : true );
+}
+
+HNSM_RESULT_T 
+HNSequenceQueue::getSwitchOnList( struct tm *time, std::vector< std::string > &swidList )
+{
+    if( time == NULL )
+        return HNSM_RESULT_FAILURE;
+
+    swidList.clear();
+
+    if( actionList.empty() == true )
+        return HNSM_RESULT_SUCCESS;
+
+    HNS24HTime tgtTime;
+    tgtTime.setFromHMS( time->tm_hour, time->tm_min, time->tm_sec );
+
+    // Loop through the queue until it is empty or
+    // and action has started execution.
+    while( actionList.empty() == false )
+    {
+        // Examine the first action on the queue.
+        HNSAction& curAct = actionList.front();
+
+        // Figure out whether the action is valid
+        if( curAct.startIsBefore( tgtTime ) )
+        {
+            // Check whether the action is active or expired.
+            if( curAct.endIsAfter( tgtTime ) )
+            {
+                 // The current action is active, return it in the list.
+                 swidList.push_back( curAct.getSwID() );
+                 debugPrint();
+                 return HNSM_RESULT_SUCCESS;
+            }
+            else
+            {
+                // The current time is past the end of this action
+                // so get rid of the current action and check the
+                // next one.
+                actionList.pop_front();
+                continue;
+            }
+        }
+        else
+        {
+            // Start time is after current time so nothing to do, exit
+            debugPrint();
+            return HNSM_RESULT_SUCCESS;
+        }
+    }
+
+    debugPrint();
+    return HNSM_RESULT_SUCCESS;
+}
+
+void 
+HNSequenceQueue::debugPrint()
+{
+    log.debug( "==== Sequence Queue ====" );
+
+    for( std::list< HNSAction >::iterator it = actionList.begin(); it != actionList.end(); it++ )
+    {
+       it->debugPrint( 2, log );
+    }
+}
 

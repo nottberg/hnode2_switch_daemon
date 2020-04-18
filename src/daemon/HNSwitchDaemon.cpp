@@ -10,17 +10,23 @@
 #include <syslog.h>
 
 #include <iostream>
+#include <sstream>
 
 #include "Poco/Util/ServerApplication.h"
 #include "Poco/Util/Option.h"
 #include "Poco/Util/OptionSet.h"
 #include "Poco/Util/HelpFormatter.h"
 #include "Poco/Checksum.h"
+#include <Poco/JSON/Object.h>
+#include <Poco/JSON/Parser.h>
 
-#include "HNodeSWDPacket.h"
+#include "HNSWDPacketDaemon.h"
 #include "HNSwitchDaemon.h"
 
 using namespace Poco::Util;
+
+namespace pjs = Poco::JSON;
+namespace pdy = Poco::Dynamic;
 
 #define MAXEVENTS 8
 
@@ -90,6 +96,7 @@ int
 HNSwitchDaemon::main( const std::vector<std::string>& args )
 {
     uint32_t lastCRC = 0xFFFF;
+        uint prevSec = 0;
 
     // Move me to before option processing.
     instanceName = HN_SWDAEMON_DEF_INSTANCE;
@@ -100,8 +107,16 @@ HNSwitchDaemon::main( const std::vector<std::string>& args )
        log.setLevelLimit( HNDL_LOG_LEVEL_ALL );
     }
 
+    // Initialize packet send flags
+    sendStatus = false;
+
+    // Initialize the overall health
+    overallHealth.setComponent( "Overall" );
+    overallHealth.setOK();
+
     // Setup logging for sub objects
     schMat.setDstLog( &log );
+    seqQueue.setDstLog( &log );
     switchMgr.setDstLog( &log );
 
     if( _helpRequested )
@@ -113,7 +128,9 @@ HNSwitchDaemon::main( const std::vector<std::string>& args )
     log.info( "Starting hnode2 switch daemon init" );
 
     // Initialize the schedule matrix
-    schMat.loadSchedule( HN_SWDAEMON_DEVICE_NAME, instanceName );
+    schMat.setInstance( HN_SWDAEMON_DEVICE_NAME, instanceName );
+    schMat.initState();
+    schMat.loadSchedule();
 
     // Initialize/Startup the switch manager
     switchMgr.setNotificationSink( this );
@@ -122,9 +139,7 @@ HNSwitchDaemon::main( const std::vector<std::string>& args )
     // Initialize the devices
     switchMgr.initDevices();
 
-    // Default to health ok
-    healthOK = true;
-
+    // Initialize for event loop
     epollFD = epoll_create1( 0 );
     if( epollFD == -1 )
     {
@@ -134,9 +149,6 @@ HNSwitchDaemon::main( const std::vector<std::string>& args )
 
     // Buffer where events are returned 
     events = (struct epoll_event *) calloc( MAXEVENTS, sizeof event );
-
-    // Start reading time now.
-    gettimeofday( &lastReadingTS, NULL );
 
     // Open Unix named socket for requests
     openListenerSocket( HN_SWDAEMON_DEVICE_NAME, instanceName );
@@ -175,10 +187,23 @@ HNSwitchDaemon::main( const std::vector<std::string>& args )
         ltime = time( &ltime );
         localtime_r( &ltime, &newtime );
 
+        // If scheduling is inhibited then check for
+        // for expiration.
+        if( schMat.getState() == HNSM_SCHSTATE_INHIBIT )
+        {
+            if( schMat.checkInhibitExpire( &newtime ) == true )
+            {
+                schMat.setStateEnabled();
+            }
+        }
+
         // Query the schedule matrix for the list of
         // switches that should be active currently.
         std::vector< std::string > swidOnList;
-        schMat.getSwitchOnList( &newtime, swidOnList );
+        if( seqQueue.hasActions() == true )
+            seqQueue.getSwitchOnList( &newtime, swidOnList );
+        else if( schMat.getState() == HNSM_SCHSTATE_ENABLED )
+            schMat.getSwitchOnList( &newtime, swidOnList );
 
         // Do some logging
         lastCRC = logSwitchChanges( &newtime, swidOnList, lastCRC );
@@ -186,29 +211,25 @@ HNSwitchDaemon::main( const std::vector<std::string>& args )
         // Run the list of ON switches through the switch manager 
         // to make any necessary control device changes.
         switchMgr.processOnState( swidOnList );
+
+        // Update the overall health situation
+        updateOverallHealth();
  
-/* 
-            struct timeval curTS;
+        // Send async status packets roughly every 10 seconds.
+        int diff = (newtime.tm_sec - prevSec);
+        if( (diff < 0) || (diff >= 10) )
+        {
+            prevSec = newtime.tm_sec;
+            sendStatus = true;
+        }
 
-            // Get current time
-            gettimeofday( &curTS, NULL );
-
-            // If a reading hasn't been seen for 2 minutes then
-            // degrade the health state.
-            if( (curTS.tv_sec - lastReadingTS.tv_sec) > 120 )
-            {
-                signalError( "No measurments within last 2 minutes." );
-            }
-
-            // Check if a status update should
-            // be sent
-            if( sendStatus )
-            {
-                sendStatusPacket( &curTS );
-                sendStatus = false;
-            }
-
-*/
+        // Check if a status update should
+        // be sent
+        if( sendStatus )
+        {
+            sendStatusPacket( &newtime, swidOnList );
+            sendStatus = false;
+        }
 
         // If it was a timeout then continue to next loop
         // skip socket related checks.
@@ -303,34 +324,6 @@ HNSwitchDaemon::removeSocketFromEPoll( int sfd )
 
     return HNSD_RESULT_SUCCESS;
 }
-
-/*
-HNSD_RESULT_T
-HNSwitchDaemon::init()
-{
-    // Default to health ok
-    healthOK = true;
-
-    epollFD = epoll_create1( 0 );
-    if( epollFD == -1 )
-    {
-        syslog( LOG_ERR, "epoll_create: %s", strerror(errno) );
-        return HNSD_RESULT_FAILURE;
-    }
-
-    // Buffer where events are returned 
-    events = (struct epoll_event *) calloc( MAXEVENTS, sizeof event );
-
-    // Initialize the switch manager
-    switchMgr.setNotificationSink( this );
-    switchMgr.loadConfiguration();
-
-    // Start reading time now.
-    gettimeofday( &lastReadingTS, NULL );
-
-    return HNSD_RESULT_SUCCESS;
-}
-*/
 
 HNSD_RESULT_T
 HNSwitchDaemon::addSignalSocket( int sfd )
@@ -437,271 +430,452 @@ HNSwitchDaemon::closeClientConnection( int clientFD )
 }
 
 HNSD_RESULT_T
-HNSwitchDaemon::processClientRequest( int efd )
+HNSwitchDaemon::processClientRequest( int cfd )
 {
     // One of the clients has sent us a message.
-    HNodeSWDPacket  packet;
-    uint32_t        recvd = 0;
+    HNSWDPacketDaemon packet;
+    HNSWDP_RESULT_T   result;
 
-    //std::cout << "start recvd..." << std::endl;
+    uint32_t          recvd = 0;
 
-    recvd += recv( efd, packet.getPacketPtr(), packet.getMaxPacketLength(), 0 );
+    // Note that a client request is being recieved.
+    log.info( "Receiving client request from fd: %d", cfd );
 
+    // Read the header portion of the packet
+    result = packet.rcvHeader( cfd );
+    if( result == HNSWDP_RESULT_NOPKT )
+    {
+        return HNSD_RESULT_SUCCESS;
+    }
+    else if( result != HNSWDP_RESULT_SUCCESS )
+    {
+        log.error( "ERROR: Failed while receiving packet header." );
+        return HNSD_RESULT_FAILURE;
+    } 
+
+    log.info( "Pkt - type: %d  status: %d  msglen: %d", packet.getType(), packet.getResult(), packet.getMsgLen() );
+
+    // Read any payload portion of the packet
+    result = packet.rcvPayload( cfd );
+    if( result != HNSWDP_RESULT_SUCCESS )
+    {
+        log.error( "ERROR: Failed while receiving packet payload." );
+        return HNSD_RESULT_FAILURE;
+    } 
+
+    // Take any necessary action associated with the packet
     switch( packet.getType() )
     {
-        case HNSWP_TYPE_PING:
+        // A request for status from the daemon
+        case HNSWD_PTYPE_STATUS_REQ:
         {
-            syslog( LOG_ERR, "Ping request from client: %d", efd );
+            log.info( "Status request from client: %d", cfd );
             sendStatus = true;
         }
         break;
 
-        case HNSWP_TYPE_RESET:
+        // Request the daemon to reset itself.
+        case HNSWD_PTYPE_RESET_REQ:
         {
-            syslog( LOG_ERR, "Reset request from client: %d", efd );
+            log.info( "Reset request from client: %d", cfd );
 
             // Start out with good health.
-            healthOK = true;
+            // healthOK = true;
 
             // Reinitialize the underlying RTLSDR code.
-            //demod.init();
+            // demod.init();
 
             // Start reading time now.
-            gettimeofday( &lastReadingTS, NULL );
+            // gettimeofday( &lastReadingTS, NULL );
 
             sendStatus = true;
         }
         break;
 
-        default:
+        case HNSWD_PTYPE_HEALTH_REQ:
         {
-            syslog( LOG_ERR, "RX of unknown packet - len: %d  type: %d", recvd, packet.getType() );
+            log.info( "Component Health request from client: %d", cfd );
+            sendComponentHealthPacket( cfd );
         }
         break;
-    }
 
-}
-
-#if 0
-HNSD_RESULT_T
-HNSwitchDaemon::run()
-{
-    // Startup the switch manager
-    switchMgr.start();   
-
-    // The event loop
-    while( quit == false )
-    {
-        int n, i;
-
-        // Check for events
-        n = epoll_wait( epollFD, events, MAXEVENTS, 0 );
-
-        // EPoll error
-        if( n < 0 )
+        // Request a manual sequence of switch activity.
+        case HNSWD_PTYPE_USEQ_ADD_REQ:
         {
-            // If we've been interrupted by an incoming signal, continue, wait for socket indication
-            if( errno == EINTR )
-                continue;
+            HNSM_RESULT_T result;
+            std::string msg;
+            std::string error;
+            struct tm newtime;
+            time_t ltime;
+ 
+            log.info( "Uniform sequence add request from client: %d", cfd );
 
-            // Handle error
+            // Get the current time 
+            ltime = time( &ltime );
+            localtime_r( &ltime, &newtime );
+
+            // Attempt to add the sequence
+            packet.getMsg( msg );
+            result = seqQueue.addUniformSequence( &newtime, msg, error );
+            
+            if( result != HNSM_RESULT_SUCCESS )
+            {
+                // Create the packet.
+                HNSWDPacketDaemon opacket( HNSWD_PTYPE_USEQ_ADD_RSP, HNSWD_RCODE_FAILURE, error );
+
+                // Send packet to requesting client
+                opacket.sendAll( cfd );
+
+                return HNSD_RESULT_SUCCESS;
+            }
+            
+            seqQueue.debugPrint();
+
+            // Create the packet.
+            HNSWDPacketDaemon opacket( HNSWD_PTYPE_USEQ_ADD_RSP, HNSWD_RCODE_SUCCESS, error );
+
+            // Send packet to requesting client
+            opacket.sendAll( cfd );
         }
+        break;
 
-        // Timeout
-        if( n == 0 )
+        case HNSWD_PTYPE_SEQ_CANCEL_REQ:
         {
-            struct timeval curTS;
+            std::string msg;
+            HNSM_RESULT_T result;
+ 
+            log.info( "Cancel sequence request from client: %d", cfd );
 
-            // Get current time
-            gettimeofday( &curTS, NULL );
-
-            // If a reading hasn't been seen for 2 minutes then
-            // degrade the health state.
-            if( (curTS.tv_sec - lastReadingTS.tv_sec) > 120 )
+            result = seqQueue.cancelSequences();
+            
+            if( result != HNSM_RESULT_SUCCESS )
             {
-                signalError( "No measurments within last 2 minutes." );
-            }
+                std::string error;
 
-            // Check if a status update should
-            // be sent
-            if( sendStatus )
-            {
-                sendStatusPacket( &curTS );
-                sendStatus = false;
-            }
+                // Create the packet.
+                HNSWDPacketDaemon opacket( HNSWD_PTYPE_SEQ_CANCEL_RSP, HNSWD_RCODE_FAILURE, error );
 
-            // Run the RTLSDR loop
-            if( switchMgr.evaluateActions() )
-            {
-	            daemon_log( LOG_ERR, "Fatal error while evaluating switch actions, exiting...\n" );
-	            break;
+                // Send packet to requesting client
+                opacket.sendAll( cfd );
+
+                return HNSD_RESULT_SUCCESS;
             }
-            continue;
+            
+            seqQueue.debugPrint();
+
+            // Create the packet.
+            HNSWDPacketDaemon opacket( HNSWD_PTYPE_SEQ_CANCEL_RSP, HNSWD_RCODE_SUCCESS, msg );
+
+            // Send packet to requesting client
+            opacket.sendAll( cfd );
         }
+        break;
 
-        // Socket event
-        for( i = 0; i < n; i++ )
-	    {
-            // Dispatch based on file desriptor
-            if( signalFD == events[i].data.fd )
+        case HNSWD_PTYPE_SWINFO_REQ:
+        {
+            log.info( "Switch Info request from client: %d", cfd );
+            sendSwitchInfoPacket( cfd );
+        }
+        break;
+
+        case HNSWD_PTYPE_SCH_STATE_REQ:
+        {
+            pjs::Parser parser;
+            std::string msg;
+            std::string empty;
+            std::string error;
+            std::string newState;
+            std::string inhDur;
+
+            log.info( "Schedule State request from client: %d", cfd );
+
+            // Get inbound request message
+            packet.getMsg( msg );
+
+            // Parse the json
+            try
             {
-                // There was signal activity from libdaemon
-	            if( (events[i].events & EPOLLERR) || (events[i].events & EPOLLHUP) || (!(events[i].events & EPOLLIN)) )
-	            {
-                    // An error has occured on this fd, or the socket is not ready for reading (why were we notified then?) 
-	                daemon_log( LOG_ERR, "epoll error on daemon signal socket\n" );
-	                close (events[i].data.fd);
-	                continue;
-	            }
+                // Attempt to parse the json
+                pdy::Var varRoot = parser.parse( msg );
 
-                // Read the signal from the socket
-                int sig = daemon_signal_next();
-                if( sig <= 0 ) 
+                // Get a pointer to the root object
+                pjs::Object::Ptr jsRoot = varRoot.extract< pjs::Object::Ptr >();
+
+                newState = jsRoot->optValue( "state", empty );
+                inhDur   = jsRoot->optValue( "inhibitDuration", empty );
+
+                if( newState.empty() || inhDur.empty() )
                 {
-                    daemon_log(LOG_ERR, "daemon_signal_next() failed: %s", strerror(errno));
-                    break;
-                }
+                    log.error( "ERROR: Schedule State request malformed." );
 
-                // Act on the signal
-                switch (sig)
-                {
+                    // Send error packet.
+                    HNSWDPacketDaemon opacket( HNSWD_PTYPE_SCH_STATE_RSP, HNSWD_RCODE_FAILURE, error );
+                    opacket.sendAll( cfd );
 
-                    case SIGINT:
-                    case SIGQUIT:
-                    case SIGTERM:
-                    {
-                        daemon_log( LOG_WARNING, "Got SIGINT, SIGQUIT or SIGTERM." );
-                        quit = true;
-                    }
-                    break;
-
-                    case SIGHUP:
-                    default:
-                    {
-                        daemon_log( LOG_INFO, "HUP - Ignoring signal" );
-                        break;
-                    }
+                    return HNSD_RESULT_SUCCESS;
                 }
             }
-            else if( acceptFD == events[i].data.fd )
-	        {
-                // New client connections
-	            if( (events[i].events & EPOLLERR) || (events[i].events & EPOLLHUP) || (!(events[i].events & EPOLLIN)) )
-	            {
-                    /* An error has occured on this fd, or the socket is not ready for reading (why were we notified then?) */
-                    daemon_log( LOG_ERR, "accept socket closed - restarting\n" );
-                    close (events[i].data.fd);
-	                continue;
-	            }
+            catch( Poco::Exception ex )
+            {
+                log.error( "ERROR: Schedule State request malformed - parse failure: %s", ex.displayText().c_str() );
 
-                processNewClientConnections();
-                continue;
+                // Send error packet.
+                HNSWDPacketDaemon opacket( HNSWD_PTYPE_SCH_STATE_RSP, HNSWD_RCODE_FAILURE, error );
+                opacket.sendAll( cfd );
+
+                return HNSD_RESULT_SUCCESS;
+            }
+
+            if( "disable" == newState )
+                schMat.setStateDisabled();         
+            else if( "enable" == newState )
+                schMat.setStateEnabled();
+            else if( "inhibit" == newState )
+            {
+                struct tm newtime;
+                time_t ltime;
+ 
+                // Get the current time 
+                ltime = time( &ltime );
+                localtime_r( &ltime, &newtime );
+
+                schMat.setStateInhibited( &newtime, inhDur );
             }
             else
             {
-                // New client connections
-	            if( (events[i].events & EPOLLERR) || (events[i].events & EPOLLHUP) || (!(events[i].events & EPOLLIN)) )
-	            {
-                    // An error has occured on this fd, or the socket is not ready for reading (why were we notified then?)
-                    closeClientConnection( events[i].data.fd );
+                log.error( "ERROR: Schedule State request - request state is not supported: %s", newState.c_str() );
 
-	                continue;
-	            }
+                // Send error packet.
+                HNSWDPacketDaemon opacket( HNSWD_PTYPE_SCH_STATE_RSP, HNSWD_RCODE_FAILURE, error );
+                opacket.sendAll( cfd );
 
-                // Handle a request from a client.
-                processClientRequest( events[i].data.fd );
+                return HNSD_RESULT_SUCCESS;
             }
+
+            // Send success response
+            HNSWDPacketDaemon opacket( HNSWD_PTYPE_SCH_STATE_RSP, HNSWD_RCODE_SUCCESS, empty );
+            opacket.sendAll( cfd );
+
+            return HNSD_RESULT_SUCCESS;
         }
+        break;
+
+        // Unknown packet
+        default:
+        {
+            log.warn( "Warning: RX of unsupported packet, discarding - type: %d", packet.getType() );
+        }
+        break;
     }
 
-    // Shutdown the switch manager
-    switchMgr.stop();
+    return HNSD_RESULT_SUCCESS;
 }
-#endif
 
 void 
-HNSwitchDaemon::sendStatusPacket( struct timeval *curTS )
+HNSwitchDaemon::updateOverallHealth()
 {
-    HNodeSWDPacket packet;
-    uint32_t length;
-    uint32_t swCount;
-    uint32_t index;
+    // Accumulate system health state
+    overallHealth.setOK();
 
-    packet.setType( HNSWP_TYPE_STATUS );
-
-    packet.setActionIndex( healthOK );
-
-    packet.setParam( 0, curTS->tv_sec );
-    packet.setParam( 1, curTS->tv_usec );
-
-    swCount = switchMgr.getSwitchCount();
-
-    packet.setParam( 2, 0); // switchMgr.getActionCount() );
-    packet.setParam( 3, curErrMsg.size() );
-
-    packet.setParam( 4, swCount );
-
-    for( index = 0; index < swCount; index++ )
+    uint ccnt = schMat.getHealthComponentCount();
+    for( uint cindx = 0; cindx < ccnt; cindx++ )
     {
-        HNSWSwitch *swObj = switchMgr.getSwitchByIndex( index );
+        HNDaemonHealth *hPtr = schMat.getHealthComponent( cindx );
 
-        //syslog( LOG_INFO, "Switch %d - address: %s\n", index, swObj->getAddress().c_str() );
-        //syslog( LOG_INFO, "Switch %d - id: %s\n", index, swObj->getID().c_str() );
-        //syslog( LOG_INFO, "Switch %d - name: %s\n", index, swObj->getName().c_str() );
-        //syslog( LOG_INFO, "Switch %d - desc: %s\n", index, swObj->getDescription().c_str() );
-        //syslog( LOG_INFO, "Switch %d - mapped: %d\n", index, swObj->isMapped() );
-        //syslog( LOG_INFO, "Switch %d - controlled: %d\n", index, swObj->isControlled() );
-        //syslog( LOG_INFO, "Switch %d - Cap on/off: %d\n", index, swObj->hasCapOnOff() );
-        //syslog( LOG_INFO, "Switch %d - State: %d\n", index, swObj->isStateOn() );
-
-        //std::string getID();
-        //std::string getName();
-        //std::string getDescription();
-        //bool isMapped();
-        //bool isControlled();
-        //bool hasCapOnOff();
-        //bool isStateOn();
+        if( hPtr->getStatus() != HN_HEALTH_OK )
+            overallHealth.setStatusMsg( HN_HEALTH_FAILED, HNSWD_ECODE_SUBCOMPONENT );
     }
 
-    packet.setPayloadLength( curErrMsg.size() );
-    memcpy( packet.getPayloadPtr(), curErrMsg.c_str(), curErrMsg.size() );
-
-    for( std::map< int, ClientRecord >::iterator it = clientMap.begin(); it != clientMap.end(); it++ )
+    ccnt = switchMgr.getHealthComponentCount();
+    for( uint cindx = 0; cindx < ccnt; cindx++ )
     {
-        length = send( it->first, packet.getPacketPtr(), packet.getPacketLength(), MSG_NOSIGNAL );         
-    }    
+        HNDaemonHealth *hPtr = switchMgr.getHealthComponent( cindx );
+
+        if( hPtr->getStatus() != HN_HEALTH_OK )
+            overallHealth.setStatusMsg( HN_HEALTH_FAILED, HNSWD_ECODE_SUBCOMPONENT );
+    }
 }
 
-#if 0
 void 
-DaemonProcess::notifyNewMeasurement( uint32_t sensorIndex, HNodeSensorMeasurement &reading )
+HNSwitchDaemon::sendStatusPacket( struct tm *curTS, std::vector< std::string > &swOnList )
 {
-    HNodeSWDPacket packet;
-    uint32_t length;
+    std::stringstream statusMsg;
+    char tmpBuf[128];
 
-    gettimeofday( &lastReadingTS, NULL );
+    // Create a json root object
+    pjs::Object jsRoot;
 
-    packet.setType( HNSEPP_TYPE_HNS_MEASUREMENT );
+    // Add the timezone setting
+    jsRoot.set( "timezone", schMat.getTimezone() );
 
-    reading.buildPacketData( packet.getPayloadPtr(), length );
+    // Add the current date
+    sprintf( tmpBuf, "%2.2d/%2.2d/%4.4d", (curTS->tm_mon + 1), curTS->tm_mday, (curTS->tm_year + 1900) );
+    jsRoot.set( "date", (const char *)tmpBuf );
 
-    packet.setPayloadLength( length );
-    packet.setSensorIndex( sensorIndex );
+    // Add the current time
+    sprintf( tmpBuf, "%2.2d:%2.2d:%2.2d", curTS->tm_hour, curTS->tm_min, curTS->tm_sec );
+    jsRoot.set( "time", (const char *)tmpBuf );
 
-    for( std::map< int, ClientRecord >::iterator it = clientMap.begin(); it != clientMap.end(); it++ )
+    // Add the scheduler state
+    jsRoot.set( "schedulerState", schMat.getStateStr() );
+
+    // Add the inhibitUntil field
+    jsRoot.set( "inhibitUntil", schMat.getInhibitUntilStr() );
+
+    // Add the switch on list
+    std::string swOnStr;
+    for( std::vector< std::string >::iterator it = swOnList.begin(); it != swOnList.end(); it++ )
     {
-        length = send( it->first, packet.getPacketPtr(), packet.getPacketLength(), MSG_NOSIGNAL );         
+        if( swOnStr.empty() == false )
+            swOnStr += " ";
+
+        swOnStr += *it;
+    }
+    jsRoot.set( "swOnList", swOnStr );
+
+    // Add overall health to output.
+    pjs::Object jsDHealth;
+
+    jsDHealth.set( "component", overallHealth.getComponent() );
+    jsDHealth.set( "status", overallHealth.getStatusStr() );
+    jsDHealth.set( "msg", overallHealth.getMsg() );
+
+    jsRoot.set( "overallHealth", jsDHealth );
+
+    // Render into a json string for the status packet.
+    try
+    {
+        // Write out the generated json
+        pjs::Stringifier::stringify( jsRoot, statusMsg );
+    }
+    catch( ... )
+    {
+        return;
     }
 
-    // Since we recieved a measurement
-    // things must be working.
-    signalRunning();
+    // Create the packet.
+    HNSWDPacketDaemon packet( HNSWD_PTYPE_DAEMON_STATUS, HNSWD_RCODE_SUCCESS, statusMsg.str() );
+
+    // Broadcast packets to listeners
+    for( std::map< int, ClientRecord >::iterator it = clientMap.begin(); it != clientMap.end(); it++ )
+    {
+        packet.sendAll( it->first );         
+    }
 }
-#endif
+
+
+void 
+HNSwitchDaemon::sendComponentHealthPacket( int clientFD )
+{
+    std::stringstream statusMsg;
+    char tmpBuf[64];
+
+    // Create a json root object
+    pjs::Object jsRoot;
+
+    // Accumulate system health state
+    pjs::Array jsDCHealth;
+    pjs::Object jsCHealth;
+
+    overallHealth.setOK();
+
+    uint ccnt = schMat.getHealthComponentCount();
+    for( uint cindx = 0; cindx < ccnt; cindx++ )
+    {
+        HNDaemonHealth *hPtr = schMat.getHealthComponent( cindx );
+
+        if( hPtr->getStatus() != HN_HEALTH_OK )
+            overallHealth.setStatusMsg( HN_HEALTH_FAILED, HNSWD_ECODE_SUBCOMPONENT );
+
+        jsCHealth.set( "component", hPtr->getComponent() );
+        jsCHealth.set( "status", hPtr->getStatusStr() );
+        sprintf( tmpBuf, "%d", hPtr->getErrorCode() );
+        jsCHealth.set( "errCode", (const char *)tmpBuf );
+        jsCHealth.set( "msg", hPtr->getMsg() );
+
+        jsDCHealth.add( jsCHealth );
+    }
+
+    ccnt = switchMgr.getHealthComponentCount();
+    for( uint cindx = 0; cindx < ccnt; cindx++ )
+    {
+        HNDaemonHealth *hPtr = switchMgr.getHealthComponent( cindx );
+
+        if( hPtr->getStatus() != HN_HEALTH_OK )
+            overallHealth.setStatusMsg( HN_HEALTH_FAILED, HNSWD_ECODE_SUBCOMPONENT );
+
+        jsCHealth.set( "component", hPtr->getComponent() );
+        jsCHealth.set( "status", hPtr->getStatusStr() );
+        sprintf( tmpBuf, "%d", hPtr->getErrorCode() );
+        jsCHealth.set( "errCode", (const char *)tmpBuf );
+        jsCHealth.set( "msg", hPtr->getMsg() );
+
+        jsDCHealth.add( jsCHealth );
+    }
+
+    jsRoot.set( "componentHealth", jsDCHealth );
+
+    // Add overall health to output.
+    pjs::Object jsDHealth;
+
+    jsDHealth.set( "component", overallHealth.getComponent() );
+    jsDHealth.set( "status", overallHealth.getStatusStr() );
+    jsDHealth.set( "msg", overallHealth.getMsg() );
+
+    jsRoot.set( "overallHealth", jsDHealth );
+
+    // Render into a json string for the status packet.
+    try
+    {
+        // Write out the generated json
+        pjs::Stringifier::stringify( jsRoot, statusMsg );
+    }
+    catch( ... )
+    {
+        return;
+    }
+
+    // Create the packet.
+    HNSWDPacketDaemon packet( HNSWD_PTYPE_HEALTH_RSP, HNSWD_RCODE_SUCCESS, statusMsg.str() );
+
+    // Send packet to requesting client
+    packet.sendAll( clientFD );
+}
+
+void 
+HNSwitchDaemon::sendSwitchInfoPacket( int clientFD )
+{
+    HNSW_RESULT_T result;
+    std::string   msg;
+
+    // Generate the switch info message
+    result = switchMgr.getSwitchInfo( msg );
+
+    // Check on result
+    if( result != HNSW_RESULT_SUCCESS )
+    {
+        std::string errMsg;
+
+        // Create the error packet.
+        HNSWDPacketDaemon packet( HNSWD_PTYPE_SWINFO_RSP, HNSWD_RCODE_FAILURE, errMsg );
+
+        // Send packet to requesting client
+        packet.sendAll( clientFD );
+
+        return;
+    }
+
+    // Create the success packet.
+    HNSWDPacketDaemon packet( HNSWD_PTYPE_SWINFO_RSP, HNSWD_RCODE_SUCCESS, msg );
+
+    // Send packet to requesting client
+    packet.sendAll( clientFD );
+}
 
 void 
 HNSwitchDaemon::signalError( std::string errMsg )
 {
+#if 0
     if( (healthOK == true) || (curErrMsg != errMsg) )
     {
         syslog( LOG_ERR, "Signal Error: %s\n", errMsg.c_str() );
@@ -710,11 +884,13 @@ HNSwitchDaemon::signalError( std::string errMsg )
         curErrMsg  = errMsg;
         sendStatus = true;
     }
+#endif
 }
 
 void 
 HNSwitchDaemon::signalRunning()
 {
+#if 0
     if( healthOK == false )
     {
         syslog( LOG_ERR, "Signal Running\n" );
@@ -723,29 +899,8 @@ HNSwitchDaemon::signalRunning()
         curErrMsg.clear();
         sendStatus = true;
     }
-}
-
-
-#if 0
-DaemonProcess::DaemonProcess()
-{
-    quit = false;
-
-    sendStatus = false;
-
-    healthOK   = false;
-
-    curErrMsg.empty();
-
-    lastReadingTS.tv_sec  = 0;
-    lastReadingTS.tv_usec = 0;
-}
-
-DaemonProcess::~DaemonProcess()
-{
-
-}
 #endif
+}
 
 ClientRecord::ClientRecord()
 {

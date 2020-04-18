@@ -8,6 +8,7 @@
 #include <list>
 
 #include "HNDaemonLog.h"
+#include "HNDaemonHealth.h"
 
 typedef enum HNSScheduleMatrixResult
 {
@@ -37,7 +38,11 @@ class HNS24HTime
        ~HNS24HTime();
 
         HNSM_RESULT_T setFromHMS( uint hour, uint minute, uint second );
+        HNSM_RESULT_T setFromSeconds( uint seconds );
         HNSM_RESULT_T parseTime( std::string value );
+
+        void addSeconds( uint seconds );
+        void addDuration( HNS24HTime &duration );
 
         uint getSeconds() const;
         void getHMS( uint &hour, uint &minute, uint &second );
@@ -60,6 +65,7 @@ class HNSAction
 
     public:
         HNSAction();
+        HNSAction( HNS_ACT_T action, HNS24HTime &startTime, HNS24HTime &endTime, std::string swID );
        ~HNSAction();
 
         HNSM_RESULT_T handlePair( std::string key, std::string value );
@@ -104,12 +110,21 @@ class HNSDay
         HNSM_RESULT_T getSwitchOnList( HNS24HTime &tgtTime, std::vector< std::string > &swidList );
 };
 
+typedef enum HNScheduleMatrixState
+{
+  HNSM_SCHSTATE_ENABLED,   // Scheduling is enabled
+  HNSM_SCHSTATE_DISABLED,  // Scheduling is disabled
+  HNSM_SCHSTATE_INHIBIT    // Scheduling is inhibited for a duration.
+}HNSM_SCHSTATE_T;
+
 #define HNS_SCH_CFG_DEFAULT_PATH  "/var/cache/hnode2/"
 
-class HNScheduleMatrix
+class HNScheduleMatrix : public HNDHConsumerInterface
 {
     private:
         HNDaemonLogSrc log;
+
+        HNDaemonHealth health;
 
         std::string rootDirPath;
 
@@ -119,8 +134,17 @@ class HNScheduleMatrix
         std::string timezone;
 
         HNSDay  dayArr[ HNS_DAY_CNT ];
+
+        HNSM_SCHSTATE_T state;
+        HNS24HTime      inhibitUntil;
   
-        HNSM_RESULT_T generateFilePath( std::string &fpath );
+        HNSM_RESULT_T generateScheduleFilePath( std::string &fpath );
+        HNSM_RESULT_T generateStateFilePath( std::string &fpath );
+
+        HNSM_RESULT_T createDirectories();
+
+        HNSM_RESULT_T updateStateFile( HNSM_SCHSTATE_T value );
+        HNSM_RESULT_T readStateFile( HNSM_SCHSTATE_T &value );
 
     public:
         HNScheduleMatrix();
@@ -132,10 +156,51 @@ class HNScheduleMatrix
         std::string getRootDirectory();
 
         void setTimezone( std::string tzname );
+        std::string getTimezone();
+
+        void setInstance( std::string devname, std::string instance );
 
         void clear();
 
-        HNSM_RESULT_T loadSchedule( std::string devname, std::string instance );
+        HNSM_RESULT_T loadSchedule();
+
+        HNSM_SCHSTATE_T getState();
+        std::string getStateStr();
+
+        void initState();
+        void setStateDisabled();
+        void setStateEnabled();
+        void setStateInhibited( struct tm *time, std::string duration );
+        std::string getInhibitUntilStr();
+        bool checkInhibitExpire( struct tm *time );
+
+        HNSM_RESULT_T getSwitchOnList( struct tm *time, std::vector< std::string > &swidList );
+
+        virtual uint getHealthComponentCount();
+        virtual HNDaemonHealth* getHealthComponent( uint index );
+
+        void debugPrint();
+};
+
+
+class HNSequenceQueue
+{
+    private:
+        HNDaemonLogSrc log;
+
+        std::list< HNSAction > actionList;
+
+    public:
+        HNSequenceQueue();
+       ~HNSequenceQueue();
+
+        void setDstLog( HNDaemonLog *logPtr );
+
+        bool hasActions();
+
+        HNSM_RESULT_T cancelSequences();
+
+        HNSM_RESULT_T addUniformSequence( struct tm *time, std::string seqJSON, std::string &errMsg );
 
         HNSM_RESULT_T getSwitchOnList( struct tm *time, std::vector< std::string > &swidList );
 
