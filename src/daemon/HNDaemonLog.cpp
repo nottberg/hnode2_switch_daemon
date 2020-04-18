@@ -1,10 +1,14 @@
 #include <stdio.h>
 #include <stdarg.h>
+#include <syslog.h>
 
 #include "HNDaemonLog.h"
 
 HNDaemonLog::HNDaemonLog()
 {
+    // Runing as a daemon.
+    isDaemon = false;
+
     // Default log limit
     curLimit = HNDL_LOG_LEVEL_INFO;
 }
@@ -21,13 +25,42 @@ HNDaemonLog::setLevelLimit( HNDL_LOG_LEVEL_T value )
 }
 
 void 
+HNDaemonLog::setDaemon( bool value )
+{
+    isDaemon = value;
+}
+
+void 
 HNDaemonLog::processMsg( HNDL_LOG_LEVEL_T level, const char *format, va_list args )
 {
     if( level > curLimit )
         return;
 
-    vprintf( format, args );
-    printf( "\n" );
+    if( isDaemon == false )
+    {
+        vprintf( format, args );
+        printf( "\n" );
+        return;
+    }
+    
+    switch( level )
+    {
+        case HNDL_LOG_LEVEL_ERROR:
+            vsyslog( LOG_ERR, format, args );
+        break;
+
+        case HNDL_LOG_LEVEL_WARN:
+            vsyslog( LOG_WARNING, format, args );
+        break;
+
+        case HNDL_LOG_LEVEL_INFO:
+            vsyslog( LOG_INFO, format, args );
+        break;
+
+        case HNDL_LOG_LEVEL_DEBUG:
+            vsyslog( LOG_DEBUG, format, args );
+        break;
+    }
 }
 
 void

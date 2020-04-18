@@ -5,7 +5,7 @@
 
 #include <string>
 
-#include "HNSWDPacket.h"
+#include "HNSwitchDaemon.h"
 
 typedef enum HNSWDPacketClientResultEnum
 {

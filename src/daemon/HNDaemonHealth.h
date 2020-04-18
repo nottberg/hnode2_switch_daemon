@@ -4,7 +4,7 @@
 #include <cstdarg>
 #include <string>
 
-#include "HNSWDPacket.h"
+#include "HNSwitchDaemon.h"
 
 class HNDaemonHealth
 {

@@ -5,6 +5,9 @@
 
 #include <string>
 
+#define HN_SWDAEMON_DEVICE_NAME  "switch-daemon"
+#define HN_SWDAEMON_DEF_INSTANCE "default"
+
 typedef enum HNodeSWDPacketTypeEnum
 {
     HNSWD_PTYPE_NOTSET,

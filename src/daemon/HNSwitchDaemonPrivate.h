@@ -27,9 +27,6 @@ class ClientRecord
         int getFD();
 };
 
-#define HN_SWDAEMON_DEVICE_NAME  "switch-daemon"
-#define HN_SWDAEMON_DEF_INSTANCE "default"
-
 typedef enum HNSwitchDaemonResultEnum
 {
   HNSD_RESULT_SUCCESS,
@@ -41,8 +38,11 @@ class HNSwitchDaemon : public Poco::Util::ServerApplication, public HNSwitchMana
     private:
         HNDaemonLog log;
 
-        bool _helpRequested = false;
-        bool _debugLogging = false;
+        bool _helpRequested   = false;
+        bool _debugLogging    = false;
+        bool _instancePresent = false;
+
+        std::string _instance; 
 
         bool quit;
 

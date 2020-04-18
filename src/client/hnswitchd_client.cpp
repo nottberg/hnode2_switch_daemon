@@ -43,10 +43,12 @@ class HNSwitchClient: public Application
         bool _seqcancelRequested = false;
         bool _schstateRequested  = false;
         bool _durationPresent    = false;
+        bool _instancePresent    = false;
         
         std::string _seqaddFilePath;
         std::string _schstateNewState;
         std::string _durationStr;
+        std::string _instanceStr;
 
     public:
 	    HNSwitchClient()
@@ -81,6 +83,8 @@ class HNSwitchClient: public Application
             Application::defineOptions( options );
 
 		    options.addOption( Option("help", "h", "display help information on command line arguments").required(false).repeatable(false).callback(OptionCallback<HNSwitchClient>(this, &HNSwitchClient::handleHelp)));
+
+            options.addOption( Option("instance", "", "The instance of the daemon to connect to.").required(false).repeatable(false).argument("00:00:00").callback(OptionCallback<HNSwitchClient>(this, &HNSwitchClient::handleOptions)));
 
             options.addOption( Option("status", "s", "Make an explicit request for a status packet from the deamon.").required(false).repeatable(false).callback(OptionCallback<HNSwitchClient>(this, &HNSwitchClient::handleOptions)));
 
@@ -138,6 +142,12 @@ class HNSwitchClient: public Application
                 _durationPresent = true;
                 _durationStr     = value;
             }
+            else if( "instance" == name )
+            {
+                _instancePresent = true;
+                _instanceStr     = value;
+            }
+
         }
 
         void displayHelp()
@@ -185,9 +195,12 @@ class HNSwitchClient: public Application
             // Bailout if help was requested.
             if( _helpRequested == true )
                 return Application::EXIT_OK;
+ 
+            if( _instancePresent == false )
+                _instanceStr = HN_SWDAEMON_DEF_INSTANCE;
 
             // Establish the connection.
-            if( openClientSocket( "switch-daemon", "default", sockfd ) == true )
+            if( openClientSocket( HN_SWDAEMON_DEVICE_NAME, _instanceStr, sockfd ) == true )
             {
                 std::cerr << "ERROR: Could not establish connection to daemon. Exiting..." << std::endl;
                 return Application::EXIT_SOFTWARE;

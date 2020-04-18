@@ -15,6 +15,7 @@ typedef enum HNDaemonLogLevelEnum
 class HNDaemonLog
 {
     private:
+        bool isDaemon;
 
         HNDL_LOG_LEVEL_T curLimit;
 
@@ -24,6 +25,8 @@ class HNDaemonLog
     public:
         HNDaemonLog();
        ~HNDaemonLog();
+
+        void setDaemon( bool value );
 
         void setLevelLimit( HNDL_LOG_LEVEL_T value );
 
