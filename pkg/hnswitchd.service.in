@@ -1,0 +1,13 @@
+# Contents of /etc/systemd/system/@DAEMON_NAME@.service
+[Unit]
+Description=@DAEMON_NAME@
+After=network.target
+User=hnode2
+
+[Service]
+Type=forking
+Restart=always
+ExecStart=/usr/sbin/@DAEMON_NAME@
+
+[Install]
+WantedBy=multi-user.target

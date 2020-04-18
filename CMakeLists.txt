@@ -6,6 +6,8 @@ SET( MINOR_VERSION 0 )
 SET( PATCH_VERSION 0 )
 SET( RELEASE_VERSION 0 )
 
+SET( DAEMON_NAME hnswitchd )
+
 #SET( CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/Modules/" )
 
 # Default the install prefix to just /usr
@@ -51,7 +53,12 @@ ADD_EXECUTABLE( hnswitchd_client ${HNSWITCHD_CLIENT_SRC} )
 TARGET_LINK_LIBRARIES( hnswitchd_client PRIVATE Poco::Foundation Poco::Net Poco::NetSSL Poco::JSON )
 
 INSTALL( TARGETS hnswitchd DESTINATION ${CMAKE_INSTALL_PREFIX}/sbin COMPONENT daemon )
+
+CONFIGURE_FILE( ${CMAKE_SOURCE_DIR}/pkg/hnswitchd.service.in ${CMAKE_BINARY_DIR}/hnswitchd.service @ONLY )
+INSTALL( FILES ${CMAKE_BINARY_DIR}/hnswitchd.service DESTINATION /etc/systemd/system/ COMPONENT daemon )
+
 INSTALL( TARGETS hnswitchd_client DESTINATION ${CMAKE_INSTALL_PREFIX}/bin COMPONENT client )
+
 INSTALL( FILES ${HNSWITCHD_DEV_HDR} DESTINATION ${CMAKE_INSTALL_PREFIX}/include/hnode2 COMPONENT dev )
 
 SET( CPACK_GENERATOR "DEB" )
