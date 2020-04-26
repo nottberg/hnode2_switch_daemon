@@ -42,6 +42,8 @@ class HNSwitchClient: public Application
         bool _swinfoRequested    = false;
         bool _seqcancelRequested = false;
         bool _schstateRequested  = false;
+        bool _singleRequested    = false;
+
         bool _durationPresent    = false;
         bool _instancePresent    = false;
         
@@ -49,6 +51,7 @@ class HNSwitchClient: public Application
         std::string _schstateNewState;
         std::string _durationStr;
         std::string _instanceStr;
+        std::string _swID;
 
     public:
 	    HNSwitchClient()
@@ -100,9 +103,11 @@ class HNSwitchClient: public Application
 
             options.addOption( Option("seqcancel", "x", "Cancel any previously added switch sequences.").required(false).repeatable(false).callback(OptionCallback<HNSwitchClient>(this, &HNSwitchClient::handleOptions)));
 
-            options.addOption( Option("schstate", "e", "Change the scheduler state. Possible states: enabled|disabled|inhibit. For inhibit the duration parameter is also required.").required(false).repeatable(false).argument("newstate").callback(OptionCallback<HNSwitchClient>(this, &HNSwitchClient::handleOptions)));
+            options.addOption( Option("schstate", "e", "Change the scheduler state. Possible states: enable|disable|inhibit. For inhibit the duration parameter is also required.").required(false).repeatable(false).argument("newstate").callback(OptionCallback<HNSwitchClient>(this, &HNSwitchClient::handleOptions)));
 
             options.addOption( Option("duration", "d", "Duration in HH:MM:SS format.").required(false).repeatable(false).argument("00:00:00").callback(OptionCallback<HNSwitchClient>(this, &HNSwitchClient::handleOptions)));
+
+            options.addOption( Option("single", "t", "Turn on a single switch for duration time.").required(false).repeatable(false).argument("swid").callback(OptionCallback<HNSwitchClient>(this, &HNSwitchClient::handleOptions)));
 
         }
 	
@@ -146,6 +151,11 @@ class HNSwitchClient: public Application
             {
                 _instancePresent = true;
                 _instanceStr     = value;
+            }
+            else if( "single" == name )
+            {
+                _singleRequested = true;
+                _swID  = value;
             }
 
         }
@@ -361,6 +371,31 @@ class HNSwitchClient: public Application
 
                 packet.sendAll( sockfd );
             }
+            else if( _singleRequested == true )
+            {
+                std::stringstream msg;
+
+                // Make sure a duration was present
+                if( _durationPresent == false )
+                {
+                    std::cout << "ERROR: When requesting single switch turn-on a duration must be provided" << std::endl;
+                    return Application::EXIT_SOFTWARE;
+                }
+
+                // Build the json request
+                msg << "{";
+                msg << " \"seqType\":\"uniform\"";
+                msg << ", \"onDuration\":\"" << _durationStr << "\"";
+                msg << ", \"offDuration\":\"00:00:00\"";
+                msg << ", \"swidList\":\"" << _swID << "\"";
+                msg << "}";
+            
+                HNSWDPacketClient packet( HNSWD_PTYPE_USEQ_ADD_REQ, HNSWD_RCODE_NOTSET, msg.str() );
+
+                std::cout << "Sending a Single Switch Add request..." << std::endl;
+
+                packet.sendAll( sockfd );
+            }
 
             // Listen for packets
             bool quit = false;
@@ -554,7 +589,7 @@ class HNSwitchClient: public Application
                         std::cout << "=== Uniform Sequence Add Response Recieved - result code: " << packet.getResult() << " ===" << std::endl;
 
                         // Exit if we received the expected response and monitoring wasn't requested.
-                        if( (_seqaddRequested == true) && (_monitorRequested == false ) )
+                        if( ( (_seqaddRequested == true) || (_singleRequested == true) ) && (_monitorRequested == false ) )
                             quit = true;
 
                     }
