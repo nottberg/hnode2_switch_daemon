@@ -1,7 +1,7 @@
 # hnode2_switch_daemon
-The low level daemon for controlling switches via an i2c gpio expander.
+A low level daemon for controlling switches via an i2c gpio expander.
 
-Basic Build Intsructions
+Basic Build Instructions
 -----------------------
 1. mkdir build
 2. cd build
