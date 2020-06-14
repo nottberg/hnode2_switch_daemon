@@ -25,7 +25,9 @@ typedef enum HNodeSWDPacketTypeEnum
     HNSWD_PTYPE_SCH_STATE_REQ,  // Change scheduling state. Enable/Disable/Inhibit
     HNSWD_PTYPE_SCH_STATE_RSP,
     HNSWD_PTYPE_SWINFO_REQ,     // Request info about managed switches.
-    HNSWD_PTYPE_SWINFO_RSP
+    HNSWD_PTYPE_SWINFO_RSP,
+    HNSWD_PTYPE_SCHEDULE_UPDATE_REQ,   // Set a new schedule.
+    HNSWD_PTYPE_SCHEDULE_UPDATE_RSP
 }HNSWD_PTYPE_T;
 
 typedef enum HNodeSWDPacketResultCodeEnum
