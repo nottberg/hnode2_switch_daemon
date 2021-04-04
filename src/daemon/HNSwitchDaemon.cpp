@@ -687,6 +687,68 @@ HNSwitchDaemon::processClientRequest( int cfd )
         }
         break;
 
+        case HNSWD_PTYPE_SCHEDULE_UPDATE_REQ:
+        {
+            pjs::Parser parser;
+            std::string msg;
+            std::string empty;
+            std::string error;
+
+            log.info( "Schedule Update request from client: %d", cfd );
+
+            // Get inbound request message
+            packet.getMsg( msg );
+
+            // Validate the json
+            try
+            {
+                // Attempt to parse the json
+                pdy::Var varRoot = parser.parse( msg );
+
+                // Get a pointer to the root object
+                pjs::Object::Ptr jsRoot = varRoot.extract< pjs::Object::Ptr >();
+
+                // Make sure the scheduleMatrix array is present
+
+                // Make sure the mandatory CRC32 field is present and read its value.
+                std::string schCRC32  = jsRoot->optValue( "scheduleCRC32", empty );
+
+                if( schCRC32.empty() )
+                {
+                    log.error( "ERROR: Schedule Update request malformed." );
+
+                    // Send error packet.
+                    HNSWDPacketDaemon opacket( HNSWD_PTYPE_SCHEDULE_UPDATE_RSP, HNSWD_RCODE_FAILURE, error );
+                    opacket.sendAll( cfd );
+
+                    return HNSD_RESULT_SUCCESS;
+                }
+            }
+            catch( Poco::Exception ex )
+            {
+                log.error( "ERROR: Schedule State request malformed - parse failure: %s", ex.displayText().c_str() );
+
+                // Send error packet.
+                HNSWDPacketDaemon opacket( HNSWD_PTYPE_SCHEDULE_UPDATE_RSP, HNSWD_RCODE_FAILURE, error );
+                opacket.sendAll( cfd );
+
+                return HNSD_RESULT_SUCCESS;
+            }
+
+            // Replace the schedule file
+            schMat.replaceSchedule( msg );
+
+            // Force a reload of the schedule
+            schMat.loadSchedule();
+
+            // Send success response
+            HNSWDPacketDaemon opacket( HNSWD_PTYPE_SCHEDULE_UPDATE_RSP, HNSWD_RCODE_SUCCESS, empty );
+            opacket.sendAll( cfd );
+
+            return HNSD_RESULT_SUCCESS;
+        }
+        break;
+
         // Unknown packet
         default:
         {
@@ -748,6 +810,13 @@ HNSwitchDaemon::sendStatusPacket( struct tm *curTS, std::vector< std::string > &
 
     // Add the inhibitUntil field
     jsRoot.set( "inhibitUntil", schMat.getInhibitUntilStr() );
+
+    // Add the schedule update index field
+    sprintf( tmpBuf, "%d", schMat.getScheduleUpdateIndex() );
+    jsRoot.set( "scheduleUpdateIndex", (const char *)tmpBuf );
+
+    // Add the schedule hash value
+    jsRoot.set( "scheduleCRC32", schMat.getScheduleCRC32Str() );
 
     // Add the switch on list
     std::string swOnStr;

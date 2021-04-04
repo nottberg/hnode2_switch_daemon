@@ -285,16 +285,18 @@ HNSDay::debugPrint( uint offset, HNDaemonLogSrc &log )
 }
 
 HNScheduleMatrix::HNScheduleMatrix()
-: health( "Schedule Matrix" )
+: m_health( "Schedule Matrix" )
 {
-    rootDirPath = HNS_SCH_CFG_DEFAULT_PATH;
+    m_rootDirPath = HNS_SCH_CFG_DEFAULT_PATH;
 
     for( int i = 0; i < HNS_DAY_CNT; i++ )
     {
-        dayArr[i].setID( (HNS_DAY_INDX_T) i, scDayNames[i] );
+        m_dayArr[i].setID( (HNS_DAY_INDX_T) i, scDayNames[i] );
     }
 
-    state = HNSM_SCHSTATE_ENABLED;
+    m_state = HNSM_SCHSTATE_ENABLED;
+
+    m_schUpdateIndex = 0;
 }
 
 HNScheduleMatrix::~HNScheduleMatrix()
@@ -305,31 +307,49 @@ HNScheduleMatrix::~HNScheduleMatrix()
 void 
 HNScheduleMatrix::setDstLog( HNDaemonLog *logPtr )
 {
-    log.setDstLog( logPtr );
+    m_log.setDstLog( logPtr );
 }
 
 void 
 HNScheduleMatrix::setRootDirectory( std::string path )
 {
-    rootDirPath = path; 
+    m_rootDirPath = path; 
 }
 
 std::string 
 HNScheduleMatrix::getRootDirectory()
 {
-    return rootDirPath;
+    return m_rootDirPath;
 }
 
 void 
 HNScheduleMatrix::setTimezone( std::string tzname )
 {
-    timezone = tzname;
+    m_timezone = tzname;
+}
+
+void 
+HNScheduleMatrix::setScheduleCRC32Str( std::string value )
+{
+    m_schCRC32 = value;
 }
 
 std::string
 HNScheduleMatrix::getTimezone()
 {
-    return timezone;
+    return m_timezone;
+}
+
+uint 
+HNScheduleMatrix::getScheduleUpdateIndex()
+{
+    return m_schUpdateIndex;
+}
+
+std::string 
+HNScheduleMatrix::getScheduleCRC32Str()
+{
+    return m_schCRC32;
 }
 
 HNSM_RESULT_T 
@@ -339,15 +359,15 @@ HNScheduleMatrix::generateScheduleFilePath( std::string &fpath )
  
     fpath.clear();
 
-    if( deviceName.empty() == true )
+    if( m_deviceName.empty() == true )
         return HNSM_RESULT_FAILURE;
 
-    if( instanceName.empty() == true )
+    if( m_instanceName.empty() == true )
         return HNSM_RESULT_FAILURE;
   
-    sprintf( tmpBuf, "%s-%s", deviceName.c_str(), instanceName.c_str() );
+    sprintf( tmpBuf, "%s-%s", m_deviceName.c_str(), m_instanceName.c_str() );
 
-    Poco::Path path( rootDirPath );
+    Poco::Path path( m_rootDirPath );
     path.makeDirectory();
     path.pushDirectory( tmpBuf );
     path.setFileName("scheduleMatrix.json");
@@ -360,12 +380,13 @@ HNScheduleMatrix::generateScheduleFilePath( std::string &fpath )
 void
 HNScheduleMatrix::clear()
 {
-    timezone.clear();
+    m_timezone.clear();
+    m_schCRC32.clear();
 
     for( int i = 0; i < HNS_DAY_CNT; i++ )
     {
-       dayArr[i].clear();
-       dayArr[i].setID( (HNS_DAY_INDX_T) i, scDayNames[i] );
+       m_dayArr[i].clear();
+       m_dayArr[i].setID( (HNS_DAY_INDX_T) i, scDayNames[i] );
     }
 }
 
@@ -373,8 +394,8 @@ void
 HNScheduleMatrix::setInstance( std::string devname, std::string instance )
 {
     // Copy over identifying information
-    deviceName   = devname;
-    instanceName = instance;
+    m_deviceName   = devname;
+    m_instanceName = instance;
 }
 
 HNSM_RESULT_T 
@@ -388,8 +409,8 @@ HNScheduleMatrix::loadSchedule()
     // Generate and verify filename
     if( generateScheduleFilePath( fpath ) != HNSM_RESULT_SUCCESS )
     {
-        log.error( "ERROR: Failed to generate path to schedule matrix config for: %s %s", deviceName.c_str(), instanceName.c_str() );
-        health.setStatusMsg( HN_HEALTH_FAILED, HNSWD_ECODE_SM_FAILED_PATH_GEN, deviceName.c_str(), instanceName.c_str() );
+        m_log.error( "ERROR: Failed to generate path to schedule matrix config for: %s %s", m_deviceName.c_str(), m_instanceName.c_str() );
+        m_health.setStatusMsg( HN_HEALTH_FAILED, HNSWD_ECODE_SM_FAILED_PATH_GEN, m_deviceName.c_str(), m_instanceName.c_str() );
         return HNSM_RESULT_FAILURE;
     }    
 
@@ -397,12 +418,12 @@ HNScheduleMatrix::loadSchedule()
     Poco::Path path( fpath );
     Poco::File file( path );
 
-    log.info( "Attempting to load schedule matrix config from: %s", path.toString().c_str() );
+    m_log.info( "Attempting to load schedule matrix config from: %s", path.toString().c_str() );
 
     if( file.exists() == false || file.isFile() == false )
     {
-        log.error( "ERROR: Schedule matrix config file does not exist: %s", path.toString().c_str() );
-        health.setStatusMsg( HN_HEALTH_FAILED, HNSWD_ECODE_SM_CONFIG_MISSING, path.toString().c_str() ); 
+        m_log.error( "ERROR: Schedule matrix config file does not exist: %s", path.toString().c_str() );
+        m_health.setStatusMsg( HN_HEALTH_FAILED, HNSWD_ECODE_SM_CONFIG_MISSING, path.toString().c_str() ); 
         return HNSM_RESULT_FAILURE;
     }
 
@@ -412,8 +433,8 @@ HNScheduleMatrix::loadSchedule()
 
     if( its.is_open() == false )
     {
-        log.error( "ERROR: Schedule matrix config file open failed: %s", path.toString().c_str() );
-        health.setStatusMsg( HN_HEALTH_FAILED, HNSWD_ECODE_SM_CONFIG_OPEN, path.toString().c_str() ); 
+        m_log.error( "ERROR: Schedule matrix config file open failed: %s", path.toString().c_str() );
+        m_health.setStatusMsg( HN_HEALTH_FAILED, HNSWD_ECODE_SM_CONFIG_OPEN, path.toString().c_str() ); 
         return HNSM_RESULT_FAILURE;
     }
 
@@ -435,17 +456,27 @@ HNScheduleMatrix::loadSchedule()
             {
                 if( it->second.isString() == false )
                 {
-                    log.warn( "Warning: Non-string scheduleTimezone value." );
+                    m_log.warn( "Warning: Non-string scheduleTimezone value." );
                     continue;
                 }
 
                 setTimezone( it->second );
             }
+            else if( it->first == "scheduleCRC32" )
+            {
+                if( it->second.isString() == false )
+                {
+                    m_log.warn( "Warning: Non-string scheduleCRC32 value." );
+                    continue;
+                }
+
+                setScheduleCRC32Str( it->second );
+            }
             else if( it->first == "scheduleMatrix" )
             {
                 if( jsRoot->isObject( it ) == false )
                 {
-                    log.warn( "Warning: Non-object scheduleMatrix value." );
+                    m_log.warn( "Warning: Non-object scheduleMatrix value." );
                     continue;
                 }
 
@@ -460,7 +491,7 @@ HNScheduleMatrix::loadSchedule()
                         {
                             if( jsDayObj->isArray( dit ) == false )
                             {
-                                log.warn( "Warning: Non-array day object value: %s", dit->first.c_str() );
+                                m_log.warn( "Warning: Non-array day object value: %s", dit->first.c_str() );
                                 break;
                             }
 
@@ -478,18 +509,18 @@ HNScheduleMatrix::loadSchedule()
                                     {
                                         if( aoit->second.isString() == false )
                                         {
-                                            log.warn( "Warning: Non-string action object value" );
+                                            m_log.warn( "Warning: Non-string action object value" );
                                             break;
                                         }
                                         
                                         tmpAction.handlePair( aoit->first, aoit->second );
                                     }
 
-                                    dayArr[ dindx ].addAction( tmpAction );
+                                    m_dayArr[ dindx ].addAction( tmpAction );
                                 }
                                 else
                                 {
-                                    log.warn( "Warning: Non-object type for day action." );
+                                    m_log.warn( "Warning: Non-object type for day action." );
                                 }
                             }
 
@@ -506,8 +537,8 @@ HNScheduleMatrix::loadSchedule()
     }
     catch( Poco::Exception ex )
     {
-        log.error( "ERROR: Schedule matrix config file json parse failure: %s", ex.displayText().c_str() );
-        health.setStatusMsg( HN_HEALTH_FAILED, HNSWD_ECODE_SM_CONFIG_PARSER, ex.displayText().c_str() ); 
+        m_log.error( "ERROR: Schedule matrix config file json parse failure: %s", ex.displayText().c_str() );
+        m_health.setStatusMsg( HN_HEALTH_FAILED, HNSWD_ECODE_SM_CONFIG_PARSER, ex.displayText().c_str() ); 
         its.close();
         return HNSM_RESULT_FAILURE;
     }
@@ -515,15 +546,68 @@ HNScheduleMatrix::loadSchedule()
     // Sort the actions
     for( int i = 0; i < HNS_DAY_CNT; i++ )
     {
-       dayArr[i].sortActions();
+       m_dayArr[i].sortActions();
     }
     
     // 
     debugPrint();
 
-    log.info( "Schedule matrix config successfully loaded." );
+    m_log.info( "Schedule matrix config successfully loaded." );
 
-    health.setOK();
+    m_health.setOK();
+
+    // Done
+    return HNSM_RESULT_SUCCESS;
+}
+
+HNSM_RESULT_T 
+HNScheduleMatrix::replaceSchedule( std::string newSchJSON )
+{
+    std::string fpath;
+
+    m_log.info( "Replacing schedule matrix configuration." );
+
+    // Create directories if necessary
+    if( createDirectories() != HNSM_RESULT_SUCCESS )
+    {
+        m_log.error( "ERROR: Failed to create directories for schedule matrix config: %s %s", m_deviceName.c_str(), m_instanceName.c_str() );
+        return HNSM_RESULT_FAILURE;
+    }
+
+    // Generate and verify filename
+    if( generateScheduleFilePath( fpath ) != HNSM_RESULT_SUCCESS )
+    {
+        m_log.error( "ERROR: Failed to generate path to schedule matrix config for: %s %s", m_deviceName.c_str(), m_instanceName.c_str() );
+        m_health.setStatusMsg( HN_HEALTH_FAILED, HNSWD_ECODE_SM_FAILED_PATH_GEN, m_deviceName.c_str(), m_instanceName.c_str() );
+        return HNSM_RESULT_FAILURE;
+    }    
+
+    // Build target file path and verify existance
+    Poco::Path path( fpath );
+    Poco::File file( path );
+
+    // Open a stream for writinging
+    std::ofstream ots;
+    ots.open( path.toString() );
+
+    if( ots.is_open() == false )
+    {
+        return HNSM_RESULT_FAILURE;
+    }
+
+    ots.write( newSchJSON.c_str(), newSchJSON.size() );
+
+    ots.close();
+    
+    // Bump the scheduleUpdateIndex
+    m_schUpdateIndex += 1;
+
+    // 
+    debugPrint();
+
+    m_log.info( "Schedule matrix config successfully replaced." );
+
+    m_health.setOK();
 
     // Done
     return HNSM_RESULT_SUCCESS;
@@ -532,7 +616,7 @@ HNScheduleMatrix::loadSchedule()
 HNSM_RESULT_T
 HNScheduleMatrix::createDirectories()
 {
-    Poco::Path path( rootDirPath );
+    Poco::Path path( m_rootDirPath );
     path.makeDirectory();
 
     Poco::File dir( path );
@@ -565,15 +649,15 @@ HNScheduleMatrix::generateStateFilePath( std::string &fpath )
  
     fpath.clear();
 
-    if( deviceName.empty() == true )
+    if( m_deviceName.empty() == true )
         return HNSM_RESULT_FAILURE;
 
-    if( instanceName.empty() == true )
+    if( m_instanceName.empty() == true )
         return HNSM_RESULT_FAILURE;
   
-    sprintf( tmpBuf, "%s-%s", deviceName.c_str(), instanceName.c_str() );
+    sprintf( tmpBuf, "%s-%s", m_deviceName.c_str(), m_instanceName.c_str() );
 
-    Poco::Path path( rootDirPath );
+    Poco::Path path( m_rootDirPath );
     path.makeDirectory();
     path.pushDirectory( tmpBuf );
     path.setFileName("scheduleState.json");
@@ -709,23 +793,23 @@ HNScheduleMatrix::initState()
 
     if( result != HNSM_RESULT_SUCCESS )
     {
-        state = HNSM_SCHSTATE_ENABLED;
+        m_state = HNSM_SCHSTATE_ENABLED;
         return;
     }
 
-    state = pState;
+    m_state = pState;
 }
 
 HNSM_SCHSTATE_T 
 HNScheduleMatrix::getState()
 {
-    return state;
+    return m_state;
 }
 
 std::string
 HNScheduleMatrix::getStateStr()
 {
-    switch( state )
+    switch( m_state )
     {
         case HNSM_SCHSTATE_ENABLED:
             return "enabled";
@@ -741,15 +825,15 @@ HNScheduleMatrix::getStateStr()
 void 
 HNScheduleMatrix::setStateDisabled()
 {
-    state = HNSM_SCHSTATE_DISABLED;
-    updateStateFile( state );
+    m_state = HNSM_SCHSTATE_DISABLED;
+    updateStateFile( m_state );
 }
 
 void 
 HNScheduleMatrix::setStateEnabled()
 {
-    state = HNSM_SCHSTATE_ENABLED;
-    updateStateFile( state );
+    m_state = HNSM_SCHSTATE_ENABLED;
+    updateStateFile( m_state );
 }
 
 void 
@@ -757,21 +841,21 @@ HNScheduleMatrix::setStateInhibited( struct tm *time, std::string durationStr )
 {
     HNS24HTime duration;
 
-    state = HNSM_SCHSTATE_INHIBIT;
+    m_state = HNSM_SCHSTATE_INHIBIT;
 
     duration.parseTime( durationStr.c_str() );
 
-    inhibitUntil.setFromHMS( time->tm_hour, time->tm_min, time->tm_sec );
-    inhibitUntil.addDuration( duration );
+    m_inhibitUntil.setFromHMS( time->tm_hour, time->tm_min, time->tm_sec );
+    m_inhibitUntil.addDuration( duration );
 }
 
 std::string
 HNScheduleMatrix::getInhibitUntilStr()
 {
-    if( state != HNSM_SCHSTATE_INHIBIT )
+    if( m_state != HNSM_SCHSTATE_INHIBIT )
         return "00:00:00";
 
-    return inhibitUntil.getHMSStr();
+    return m_inhibitUntil.getHMSStr();
 }
 
 bool 
@@ -781,7 +865,7 @@ HNScheduleMatrix::checkInhibitExpire( struct tm *time )
 
     curTime.setFromHMS(  time->tm_hour, time->tm_min, time->tm_sec );
 
-    if( inhibitUntil.getSeconds() <= curTime.getSeconds() )
+    if( m_inhibitUntil.getSeconds() <= curTime.getSeconds() )
         return true;
 
     return false;
@@ -797,7 +881,7 @@ HNDaemonHealth*
 HNScheduleMatrix::getHealthComponent( uint index )
 {
     if( index == 0 )
-        return &health;
+        return &m_health;
 
     return NULL;
 }
@@ -813,19 +897,19 @@ HNScheduleMatrix::getSwitchOnList( struct tm *time, std::vector< std::string > &
     HNS24HTime tgtTime;
     tgtTime.setFromHMS( time->tm_hour, time->tm_min, time->tm_sec );
 
-    return dayArr[ time->tm_wday ].getSwitchOnList( tgtTime, swidList );
+    return m_dayArr[ time->tm_wday ].getSwitchOnList( tgtTime, swidList );
 }
 
 void
 HNScheduleMatrix::debugPrint()
 {
-    log.debug( "==== Schedule Matrix for %s-%s ====", deviceName.c_str(), instanceName.c_str() );
-    log.debug( "  timezone: %s", timezone.c_str() );
-    log.debug( "  === Schedule Array ===" );
+    m_log.debug( "==== Schedule Matrix for %s-%s ====", m_deviceName.c_str(), m_instanceName.c_str() );
+    m_log.debug( "  timezone: %s", m_timezone.c_str() );
+    m_log.debug( "  === Schedule Array ===" );
 
     for( int i = 0; i < HNS_DAY_CNT; i++ )
     {
-       dayArr[i].debugPrint( 4, log );
+       m_dayArr[i].debugPrint( 4, m_log );
     }
 }
 
@@ -843,7 +927,7 @@ HNSequenceQueue::~HNSequenceQueue()
 void 
 HNSequenceQueue::setDstLog( HNDaemonLog *logPtr )
 {
-    log.setDstLog( logPtr );
+    m_log.setDstLog( logPtr );
 }
 
 HNSM_RESULT_T 
@@ -887,7 +971,7 @@ HNSequenceQueue::addUniformSequence( struct tm *time, std::string seqJSON, std::
         if( onDuration.empty() )
         {
             // Missing required fields.
-            log.warn( "Warning: Received Add Sequence request is missing the required 'onTime' field." );
+            m_log.warn( "Warning: Received Add Sequence request is missing the required 'onTime' field." );
             return HNSM_RESULT_FAILURE;
         }
 
@@ -902,7 +986,7 @@ HNSequenceQueue::addUniformSequence( struct tm *time, std::string seqJSON, std::
         if( offDuration.empty() )
         {
             // Missing required fields.
-            log.warn( "Warning: Received Add Sequence request is missing the required 'offTime' field." );
+            m_log.warn( "Warning: Received Add Sequence request is missing the required 'offTime' field." );
             return HNSM_RESULT_FAILURE;
         }
 
@@ -917,7 +1001,7 @@ HNSequenceQueue::addUniformSequence( struct tm *time, std::string seqJSON, std::
         if( swidList.empty() )
         {
             // Missing required fields.
-            log.warn( "Warning: Received Add Sequence request is missing the required 'swidList' field." );
+            m_log.warn( "Warning: Received Add Sequence request is missing the required 'swidList' field." );
             return HNSM_RESULT_FAILURE;
         }
 
@@ -973,7 +1057,7 @@ HNSequenceQueue::addUniformSequence( struct tm *time, std::string seqJSON, std::
     }
     catch( Poco::Exception ex )
     {
-        log.error( "ERROR: Schedule matrix config file json parse failure: %s", ex.displayText().c_str() );
+        m_log.error( "ERROR: Schedule matrix config file json parse failure: %s", ex.displayText().c_str() );
         return HNSM_RESULT_FAILURE;
     }
 
@@ -1043,11 +1127,11 @@ HNSequenceQueue::getSwitchOnList( struct tm *time, std::vector< std::string > &s
 void 
 HNSequenceQueue::debugPrint()
 {
-    log.debug( "==== Sequence Queue ====" );
+    m_log.debug( "==== Sequence Queue ====" );
 
     for( std::list< HNSAction >::iterator it = actionList.begin(); it != actionList.end(); it++ )
     {
-       it->debugPrint( 2, log );
+       it->debugPrint( 2, m_log );
     }
 }
 

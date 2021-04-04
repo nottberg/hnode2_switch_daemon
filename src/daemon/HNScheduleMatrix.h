@@ -122,22 +122,25 @@ typedef enum HNScheduleMatrixState
 class HNScheduleMatrix : public HNDHConsumerInterface
 {
     private:
-        HNDaemonLogSrc log;
+        HNDaemonLogSrc m_log;
 
-        HNDaemonHealth health;
+        HNDaemonHealth m_health;
 
-        std::string rootDirPath;
+        std::string m_rootDirPath;
 
-        std::string deviceName;
-        std::string instanceName;
+        std::string m_deviceName;
+        std::string m_instanceName;
 
-        std::string timezone;
+        std::string m_timezone;
 
-        HNSDay  dayArr[ HNS_DAY_CNT ];
+        HNSDay  m_dayArr[ HNS_DAY_CNT ];
 
-        HNSM_SCHSTATE_T state;
-        HNS24HTime      inhibitUntil;
+        HNSM_SCHSTATE_T m_state;
+        HNS24HTime      m_inhibitUntil;
   
+        uint        m_schUpdateIndex; 
+        std::string m_schCRC32;
+
         HNSM_RESULT_T generateScheduleFilePath( std::string &fpath );
         HNSM_RESULT_T generateStateFilePath( std::string &fpath );
 
@@ -155,17 +158,22 @@ class HNScheduleMatrix : public HNDHConsumerInterface
         void setRootDirectory( std::string path );
         std::string getRootDirectory();
 
-        void setTimezone( std::string tzname );
-        std::string getTimezone();
-
         void setInstance( std::string devname, std::string instance );
+        void setTimezone( std::string tzname );
+        void setScheduleCRC32Str( std::string value );
+
+
+        HNSM_SCHSTATE_T getState();
+        std::string getStateStr();
+
+        std::string getTimezone();
+        uint getScheduleUpdateIndex();
+        std::string getScheduleCRC32Str();
 
         void clear();
 
         HNSM_RESULT_T loadSchedule();
-
-        HNSM_SCHSTATE_T getState();
-        std::string getStateStr();
+        HNSM_RESULT_T replaceSchedule( std::string newSchJSON );
 
         void initState();
         void setStateDisabled();
@@ -186,7 +194,7 @@ class HNScheduleMatrix : public HNDHConsumerInterface
 class HNSequenceQueue
 {
     private:
-        HNDaemonLogSrc log;
+        HNDaemonLogSrc m_log;
 
         std::list< HNSAction > actionList;
 
