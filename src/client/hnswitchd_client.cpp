@@ -449,6 +449,8 @@ class HNSwitchClient: public Application
 
                             std::string schState = jsRoot->optValue( "schedulerState", empty );
                             std::string inhUntil = jsRoot->optValue( "inhibitUntil", empty );
+                            std::string schUpCnt = jsRoot->optValue( "scheduleUpdateIndex", empty );
+                            std::string schUpCRC = jsRoot->optValue( "scheduleCRC32", empty );
 
                             pjs::Object::Ptr jsOHealth = jsRoot->getObject( "overallHealth" );
                             
@@ -458,8 +460,11 @@ class HNSwitchClient: public Application
                             printf( "       Date: %s\n", date.c_str() );
                             printf( "       Time: %s\n", time.c_str() );
                             printf( "   Timezone: %s\n\n", tz.c_str() );
-                            printf( "   Schduler State: %s\n", schState.c_str() );
-                            printf( "    Inhibit Until: %s\n\n", inhUntil.c_str() );
+                            printf( "    Scheduler State: %s\n", schState.c_str() );
+                            printf( "      Inhibit Until: %s\n", inhUntil.c_str() );
+                            printf( "Schedule Update Cnt: %s\n", schUpCnt.c_str() );
+                            printf( "  Schedule Checksum: %s\n\n", schUpCRC.c_str() );
+
                             printf( "  Switch On: %s\n", swON.c_str() );
                             printf( "     Health: %s (%s)\n", ohstat.c_str(), ohmsg.c_str() );
                         }
