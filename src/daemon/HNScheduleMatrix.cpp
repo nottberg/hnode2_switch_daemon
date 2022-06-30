@@ -246,6 +246,7 @@ HNSM_RESULT_T
 HNSDay::addAction( HNSAction &action )
 {
     actionArr.push_back( action );
+    return HNSM_RESULT_SUCCESS;
 }
 
 HNSM_RESULT_T 
@@ -930,9 +931,16 @@ HNSequenceQueue::setDstLog( HNDaemonLog *logPtr )
     m_log.setDstLog( logPtr );
 }
 
+void
+HNSequenceQueue::clearRequestID()
+{
+    m_requestID.clear();
+}
+
 HNSM_RESULT_T 
 HNSequenceQueue::cancelSequences()
 {
+    m_requestID.clear();
     actionList.clear();
     return HNSM_RESULT_SUCCESS;
 }
@@ -940,6 +948,7 @@ HNSequenceQueue::cancelSequences()
 #if 0
 // Example uniform sequence json
 {
+  "requestID":"sq1"
   "onTime":"00:01:00",
   "offTime":"00:05:00",
   "swidList": "sw1 sw2"
@@ -958,6 +967,15 @@ HNSequenceQueue::addUniformSequence( struct tm *time, std::string seqJSON, std::
 
     errMsg.clear();
 
+    // If a sequence is already active then reject this request
+    // to start a new sequence
+    if( m_requestID.empty() == false )
+    {
+        m_log.error( "ERROR: Can't start a new sequence while existing sequence (%s) is active.", m_requestID.c_str() );
+        errMsg = "ERROR: Can't start a new sequence while an existing sequence is active.";
+        return HNSM_RESULT_FAILURE;
+    }
+
     // Parse the json
     try
     {
@@ -966,6 +984,19 @@ HNSequenceQueue::addUniformSequence( struct tm *time, std::string seqJSON, std::
 
         // Get a pointer to the root object
         pjs::Object::Ptr jsRoot = varRoot.extract< pjs::Object::Ptr >();
+
+        std::string reqID = jsRoot->optValue( "requestID", empty );
+        if( reqID.empty() )
+        {
+            // Missing optional field.
+            m_log.warn( "Warning: Optional 'requestID' field missing, assigning default ID" );
+            m_requestID = "seqid_default";
+        }
+        else
+        {
+            m_requestID = reqID;
+            m_log.info( "Queueing sequence from requestor with ID: %s", m_requestID.c_str() );
+        }
 
         std::string onDuration = jsRoot->optValue( "onDuration", empty );
         if( onDuration.empty() )
@@ -1071,6 +1102,12 @@ HNSequenceQueue::hasActions()
     return ( actionList.empty() ? false : true );
 }
 
+std::string
+HNSequenceQueue::getRequestID()
+{
+    return m_requestID;
+}
+
 HNSM_RESULT_T 
 HNSequenceQueue::getSwitchOnList( struct tm *time, std::vector< std::string > &swidList )
 {
@@ -1109,6 +1146,12 @@ HNSequenceQueue::getSwitchOnList( struct tm *time, std::vector< std::string > &s
                 // so get rid of the current action and check the
                 // next one.
                 actionList.pop_front();
+
+                // If the action list is now empty, then 
+                // clear the m_requestID since the sequence is complete
+                if( actionList.empty() == true )
+                    clearRequestID();
+
                 continue;
             }
         }

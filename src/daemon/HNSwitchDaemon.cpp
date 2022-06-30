@@ -838,6 +838,9 @@ HNSwitchDaemon::sendStatusPacket( struct tm *curTS, std::vector< std::string > &
 
     jsRoot.set( "overallHealth", jsDHealth );
 
+    // Add the active sequence ID field
+    jsRoot.set( "activeSequenceID", seqQueue.getRequestID() );
+    
     // Render into a json string for the status packet.
     try
     {
