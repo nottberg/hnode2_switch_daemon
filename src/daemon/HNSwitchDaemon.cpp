@@ -95,6 +95,7 @@ HNSwitchDaemon::logSwitchChanges( struct tm *time, std::vector< std::string > &o
     if( lastCRC != csum.checksum() )
     {
         log.info( "Time: %s - switch on: %s", tstr.c_str(), swIDStr.c_str() );
+        triggerStatusSend();
     }
     else
     {
