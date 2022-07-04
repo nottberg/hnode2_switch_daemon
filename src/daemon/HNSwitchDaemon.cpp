@@ -190,7 +190,7 @@ HNSwitchDaemon::main( const std::vector<std::string>& args )
         time_t ltime;
 
         // Check for events
-        n = epoll_wait( epollFD, events, MAXEVENTS, 2000 );
+        n = epoll_wait( epollFD, events, MAXEVENTS, 1000 );
 
         // EPoll error
         if( n < 0 )
