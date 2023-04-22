@@ -47,7 +47,7 @@ class HNSwitchDaemon : public Poco::Util::ServerApplication, public HNSwitchMana
         bool quit;
 
         int epollFD;
-        int signalFD; 
+        //int signalFD; 
         int acceptFD;
 
         std::string instanceName;
@@ -61,12 +61,13 @@ class HNSwitchDaemon : public Poco::Util::ServerApplication, public HNSwitchMana
         HNSequenceQueue  seqQueue;
         HNSwitchManager  switchMgr;
 
-
-        bool           sendStatus;
+        uint   m_sendStatusFD;
 
         HNDaemonHealth overallHealth;
 
         void updateOverallHealth();
+
+        HNSD_RESULT_T createStatusEventFD();
 
         HNSD_RESULT_T addSocketToEPoll( int sfd );
         HNSD_RESULT_T removeSocketFromEPoll( int sfd );        
@@ -76,6 +77,7 @@ class HNSwitchDaemon : public Poco::Util::ServerApplication, public HNSwitchMana
         HNSD_RESULT_T closeClientConnection( int cfd );
 
         void sendStatusPacket( struct tm *curTS, std::vector< std::string > &swOnList );
+
         void sendComponentHealthPacket( int clientFD );
         void sendSwitchInfoPacket( int clientFD );
 
@@ -90,11 +92,13 @@ class HNSwitchDaemon : public Poco::Util::ServerApplication, public HNSwitchMana
 
         //HNSD_RESULT_T init();
 
-        HNSD_RESULT_T addSignalSocket( int sfd );
+        //HNSD_RESULT_T addSignalSocket( int sfd );
 
         HNSD_RESULT_T openListenerSocket( std::string deviceName, std::string instanceName );
 
         //HNSD_RESULT_T run();
+
+        void triggerStatusSend();
 
         //virtual void notifyNewMeasurement( uint32_t sensorIndex, HNodeSensorMeasurement &reading );
         virtual void signalError( std::string errMsg );

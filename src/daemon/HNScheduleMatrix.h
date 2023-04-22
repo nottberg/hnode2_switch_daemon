@@ -196,6 +196,9 @@ class HNSequenceQueue
     private:
         HNDaemonLogSrc m_log;
 
+        // The ID from the requestor for the current sequence
+        std::string m_requestID;
+
         std::list< HNSAction > actionList;
 
     public:
@@ -206,10 +209,14 @@ class HNSequenceQueue
 
         bool hasActions();
 
+        void clearRequestID();
+        
         HNSM_RESULT_T cancelSequences();
 
         HNSM_RESULT_T addUniformSequence( struct tm *time, std::string seqJSON, std::string &errMsg );
 
+        std::string getRequestID();
+        
         HNSM_RESULT_T getSwitchOnList( struct tm *time, std::vector< std::string > &swidList );
 
         void debugPrint();

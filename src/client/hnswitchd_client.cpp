@@ -452,6 +452,8 @@ class HNSwitchClient: public Application
                             std::string schUpCnt = jsRoot->optValue( "scheduleUpdateIndex", empty );
                             std::string schUpCRC = jsRoot->optValue( "scheduleCRC32", empty );
 
+                            std::string actSeqID = jsRoot->optValue( "activeSequenceID", empty );
+
                             pjs::Object::Ptr jsOHealth = jsRoot->getObject( "overallHealth" );
                             
                             std::string ohstat = jsOHealth->optValue( "status", empty );
@@ -464,6 +466,8 @@ class HNSwitchClient: public Application
                             printf( "      Inhibit Until: %s\n", inhUntil.c_str() );
                             printf( "Schedule Update Cnt: %s\n", schUpCnt.c_str() );
                             printf( "  Schedule Checksum: %s\n\n", schUpCRC.c_str() );
+
+                            printf( "Active Sequence ID: %s\n\n", actSeqID.c_str() );
 
                             printf( "  Switch On: %s\n", swON.c_str() );
                             printf( "     Health: %s (%s)\n", ohstat.c_str(), ohmsg.c_str() );

@@ -6,6 +6,7 @@
 #include <sys/time.h>
 #include <sys/un.h>
 #include <sys/socket.h>
+#include <sys/eventfd.h>
 
 #include <syslog.h>
 
@@ -94,6 +95,7 @@ HNSwitchDaemon::logSwitchChanges( struct tm *time, std::vector< std::string > &o
     if( lastCRC != csum.checksum() )
     {
         log.info( "Time: %s - switch on: %s", tstr.c_str(), swIDStr.c_str() );
+        triggerStatusSend();
     }
     else
     {
@@ -138,9 +140,6 @@ HNSwitchDaemon::main( const std::vector<std::string>& args )
        log.debug("Debug logging has been enabled.");
     }
 
-    // Initialize packet send flags
-    sendStatus = false;
-
     // Initialize the overall health
     overallHealth.setComponent( "Overall" );
     overallHealth.setOK();
@@ -149,8 +148,6 @@ HNSwitchDaemon::main( const std::vector<std::string>& args )
     schMat.setDstLog( &log );
     seqQueue.setDstLog( &log );
     switchMgr.setDstLog( &log );
-
-
 
     // Initialize the schedule matrix
     schMat.setInstance( HN_SWDAEMON_DEVICE_NAME, instanceName );
@@ -175,6 +172,9 @@ HNSwitchDaemon::main( const std::vector<std::string>& args )
     // Buffer where events are returned 
     events = (struct epoll_event *) calloc( MAXEVENTS, sizeof event );
 
+    // Initialize send status eventfd
+    createStatusEventFD();
+
     // Open Unix named socket for requests
     openListenerSocket( HN_SWDAEMON_DEVICE_NAME, instanceName );
 
@@ -190,7 +190,7 @@ HNSwitchDaemon::main( const std::vector<std::string>& args )
         time_t ltime;
 
         // Check for events
-        n = epoll_wait( epollFD, events, MAXEVENTS, 2000 );
+        n = epoll_wait( epollFD, events, MAXEVENTS, 1000 );
 
         // EPoll error
         if( n < 0 )
@@ -245,15 +245,7 @@ HNSwitchDaemon::main( const std::vector<std::string>& args )
         if( (diff < 0) || (diff >= 10) )
         {
             prevSec = newtime.tm_sec;
-            sendStatus = true;
-        }
-
-        // Check if a status update should
-        // be sent
-        if( sendStatus )
-        {
-            sendStatusPacket( &newtime, swidOnList );
-            sendStatus = false;
+            triggerStatusSend();
         }
 
         // If it was a timeout then continue to next loop
@@ -264,7 +256,16 @@ HNSwitchDaemon::main( const std::vector<std::string>& args )
         // Socket event
         for( i = 0; i < n; i++ )
 	    {
-            if( acceptFD == events[i].data.fd )
+            if( m_sendStatusFD == events[i].data.fd )
+	        {
+                uint64_t value = 1;
+                ssize_t result;
+                result = read( m_sendStatusFD, &value, sizeof(value) );
+
+                sendStatusPacket( &newtime, swidOnList );
+                continue;
+            }
+            else if( acceptFD == events[i].data.fd )
 	        {
                 // New client connections
 	            if( (events[i].events & EPOLLERR) || (events[i].events & EPOLLHUP) || (!(events[i].events & EPOLLIN)) )
@@ -353,11 +354,13 @@ HNSwitchDaemon::removeSocketFromEPoll( int sfd )
 }
 
 HNSD_RESULT_T
-HNSwitchDaemon::addSignalSocket( int sfd )
+HNSwitchDaemon::createStatusEventFD()
 {
-    signalFD = sfd;
+    m_sendStatusFD = eventfd(0, 0);
+    if( m_sendStatusFD == -1 )
+        return HNSD_RESULT_FAILURE;
     
-    return addSocketToEPoll( signalFD );
+    return addSocketToEPoll( m_sendStatusFD );
 }
 
 HNSD_RESULT_T
@@ -497,7 +500,7 @@ HNSwitchDaemon::processClientRequest( int cfd )
         case HNSWD_PTYPE_STATUS_REQ:
         {
             log.info( "Status request from client: %d", cfd );
-            sendStatus = true;
+            triggerStatusSend();
         }
         break;
 
@@ -515,7 +518,7 @@ HNSwitchDaemon::processClientRequest( int cfd )
             // Start reading time now.
             // gettimeofday( &lastReadingTS, NULL );
 
-            sendStatus = true;
+            triggerStatusSend();
         }
         break;
 
@@ -563,6 +566,9 @@ HNSwitchDaemon::processClientRequest( int cfd )
 
             // Send packet to requesting client
             opacket.sendAll( cfd );
+
+            // Proactively schedule a status packet to update clients
+            triggerStatusSend();
         }
         break;
 
@@ -595,6 +601,9 @@ HNSwitchDaemon::processClientRequest( int cfd )
 
             // Send packet to requesting client
             opacket.sendAll( cfd );
+
+            // Proactively schedule a status packet to update clients
+            triggerStatusSend();
         }
         break;
 
@@ -838,6 +847,9 @@ HNSwitchDaemon::sendStatusPacket( struct tm *curTS, std::vector< std::string > &
 
     jsRoot.set( "overallHealth", jsDHealth );
 
+    // Add the active sequence ID field
+    jsRoot.set( "activeSequenceID", seqQueue.getRequestID() );
+
     // Render into a json string for the status packet.
     try
     {
@@ -969,6 +981,15 @@ HNSwitchDaemon::sendSwitchInfoPacket( int clientFD )
 }
 
 void 
+HNSwitchDaemon::triggerStatusSend()
+{
+    uint64_t value = 1;
+    ssize_t result;
+
+    result = write( m_sendStatusFD, &value, sizeof(value) );
+}
+
+void 
 HNSwitchDaemon::signalError( std::string errMsg )
 {
 #if 0
@@ -978,7 +999,7 @@ HNSwitchDaemon::signalError( std::string errMsg )
 
         healthOK   = false;
         curErrMsg  = errMsg;
-        sendStatus = true;
+        triggerStatusSend();
     }
 #endif
 }
@@ -993,7 +1014,7 @@ HNSwitchDaemon::signalRunning()
 
         healthOK  = true;
         curErrMsg.clear();
-        sendStatus = true;
+        triggerStatusSend();
     }
 #endif
 }
